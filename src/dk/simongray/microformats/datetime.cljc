@@ -7,33 +7,39 @@
   A time zone is Z, or an offset such as -08:00, -0800 or -08."
   (:require [dk.simongray.microformats.html :as html]))
 
-(def ^:private date
+(def date
+  "A date, as the text of a regular expression."
   "(\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{3})")
 
-(def ^:private zone
+(def zone
+  "A time zone, as the text of a regular expression."
   "(Z|z|[+-]\\d{1,2}(?::?\\d{2})?)")
 
-(def ^:private clock
-  "(\\d{1,2}):(\\d{2})(?::(\\d{2}))?")
-
-;; the hours, the optional minutes and seconds, and a or p
-(def ^:private twelve-hour-clock
-  "(\\d{1,2})(?::(\\d{2})(?::(\\d{2}))?)?[\\t\\n\\f\\r ]*([aApP])\\.?[mM]\\.?")
-
-(def ^:private date-re
+(def date-re
+  "A date."
   (re-pattern date))
 
-(def ^:private time-re
-  (re-pattern (str clock zone "?")))
+(def time-re
+  "A time on the 24-hour clock: the hours, the minutes, the optional seconds
+  and the optional time zone."
+  (re-pattern (str "(\\d{1,2}):(\\d{2})(?::(\\d{2}))?" zone "?")))
 
-(def ^:private twelve-hour-re
-  (re-pattern twelve-hour-clock))
+(def twelve-hour-re
+  "A time on the 12-hour clock: the hours, the optional minutes and
+  seconds, and a or p."
+  #"(\d{1,2})(?::(\d{2})(?::(\d{2}))?)?[\t\n\f\r ]*([aApP])\.?[mM]\.?")
 
-(def ^:private zone-re
+(def zone-re
+  "A time zone."
   (re-pattern zone))
 
-(def ^:private date-time-re
+(def date-time-re
+  "A date and a time."
   (re-pattern (str date "[Tt ](.+)")))
+
+(def date-start-re
+  "A date at the start of a text."
+  (re-pattern (str "^" date "(?!\\d)")))
 
 (defn- two-digits
   [s]
@@ -94,29 +100,15 @@
   rules of the value-class-pattern: the first date, the first time and the
   first time zone win, and a date with a time counts only when it comes
   before any other date or time."
-  [acc x]
-  (let [{:keys [date time zone]} x]
+  [acc {:keys [date time zone] :as x}]
+  (let [take-zone #(cond-> % (and zone (not (:zone %))) (assoc :zone zone))]
     (cond
-      (and date time)
-      (if (or (:date acc) (:time acc))
-        acc
-        (cond-> (assoc acc :date date :time time)
-          (and zone (not (:zone acc))) (assoc :zone zone)))
-
-      date
-      (cond-> acc (not (:date acc)) (assoc :date date))
-
-      time
-      (if (:time acc)
-        acc
-        (cond-> (assoc acc :time time)
-          (and zone (not (:zone acc))) (assoc :zone zone)))
-
-      zone
-      (cond-> acc (not (:zone acc)) (assoc :zone zone))
-
-      :else
-      acc)))
+      (and date time) (if (or (:date acc) (:time acc))
+                        acc
+                        (take-zone (assoc acc :date date :time time)))
+      date            (cond-> acc (not (:date acc)) (assoc :date date))
+      time            (if (:time acc) acc (take-zone (assoc acc :time time)))
+      :else           (take-zone acc))))
 
 (defn combined
   "The date and time that the texts `values` of the value elements give,
@@ -140,4 +132,4 @@
   "The date at the start of the text `s`, or nil."
   [s]
   (when (string? s)
-    (second (re-find #"^(\d{4}-\d{2}-\d{2}|\d{4}-\d{3})(?!\d)" s))))
+    (second (re-find date-start-re s))))

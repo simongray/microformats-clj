@@ -34,12 +34,14 @@
       ;;     :rels     {}
       ;;     :rel-urls {}}"
   [x url]
-  (let [nodes (nodes-of x)
-        base  (if-let [href (parser/base-href nodes)]
-                (or (url/resolve url href) url)
-                url)
-        env   {:resolve (url/resolver base)}
-        state (reduce #(parser/walk env %1 %2) parser/initial-state nodes)]
+  (let [nodes    (nodes-of x)
+        base     (if-let [href (parser/base-href nodes)]
+                   (or (url/resolve url href) url)
+                   url)
+        resolver (url/resolver base)
+        ;; a URL that isn't valid stays as it's written
+        absolute #(or (resolver %) %)
+        state    (reduce #(parser/walk absolute %1 %2) parser/initial-state nodes)]
     {:items    (get-in state [:frame :children])
      :rels     (:rels state)
      :rel-urls (:rel-urls state)}))
