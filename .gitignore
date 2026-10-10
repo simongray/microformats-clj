@@ -1,0 +1,17 @@
+.DS_Store
+.cpcache/
+.nrepl-port
+.clj-kondo/.cache/
+.lsp/
+target/
+*.iml
+.idea/
+# the tests of microformats/tests, as the README tells
+dev-resources/microformats-tests/
+
+# ClojureScript tooling
+node_modules/
+.shadow-cljs/
+
+# the pages of the benchmarks, which bench.clj fetches
+bench/fixtures/
