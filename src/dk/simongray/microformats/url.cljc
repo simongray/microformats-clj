@@ -170,6 +170,13 @@
       (and (<= 0x30 c) (<= c 0x39))
       (== c 0x2B) (== c 0x2D) (== c 0x2E)))
 
+;; str/lower-case follows the default locale on the JVM, which in Turkish
+;; makes I a dotless i
+(defn- lower-case
+  [s]
+  #?(:clj  (.toLowerCase ^String s java.util.Locale/ROOT)
+     :cljs (.toLowerCase s)))
+
 (defn- split-scheme
   "The scheme of the URL `s` in lower case and the rest of it, or nil and
   `s` when it has none."
@@ -184,7 +191,7 @@
                         (scheme-code? c)  (recur (inc i))
                         :else             nil)))))]
     (if colon
-      [(str/lower-case (subs s 0 colon)) (subs s (inc colon))]
+      [(lower-case (subs s 0 colon)) (subs s (inc colon))]
       [nil s])))
 
 (defn- authority
@@ -195,7 +202,7 @@
         userinfo (when at (subs authority 0 at))
         hostport (if at (subs authority (inc at)) authority)
         [_ host port] (re-matches #"(\[[^\]]*\]|[^:]*)(?::(.*))?" hostport)
-        host     (cond-> host (special? scheme) str/lower-case)
+        host     (cond-> host (special? scheme) lower-case)
         port     (when (seq port) (str/replace port #"^0+(?=\d)" ""))]
     (when (and host
                (or (nil? port) (re-matches #"\d+" port))
@@ -226,11 +233,11 @@
 
 (defn- dot?
   [segment]
-  (contains? #{"." "%2e"} (str/lower-case segment)))
+  (contains? #{"." "%2e"} (lower-case segment)))
 
 (defn- dot-dot?
   [segment]
-  (contains? #{".." ".%2e" "%2e." "%2e%2e"} (str/lower-case segment)))
+  (contains? #{".." ".%2e" "%2e." "%2e%2e"} (lower-case segment)))
 
 ;; RFC 3986, 5.2.4, "Remove Dot Segments", by the path state of the URL
 ;; Standard

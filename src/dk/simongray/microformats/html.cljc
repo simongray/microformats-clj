@@ -6,6 +6,7 @@
   The Hiccup is that of html-pieces: an element is a vector of a keyword
   tag, an optional map of attributes and the children, and text is a
   string."
+  (:require [clojure.string :as str])
   #?(:cljs (:import [goog.string StringBuffer])))
 
 (defn element?
@@ -84,6 +85,13 @@
   "The text `s` without the ASCII whitespace at its ends."
   [s]
   (strip-start (strip-end s)))
+
+;; Infra Standard, "ASCII lowercase", as HTML compares e.g. rel values
+(defn ascii-lower-case
+  "The text `s` with the ASCII letters A to Z in lower case."
+  [s]
+  (str/replace s #"[A-Z]+" #?(:clj  #(.toLowerCase ^String % java.util.Locale/ROOT)
+                              :cljs #(.toLowerCase %))))
 
 ;; JavaScript splits a string fastest itself
 (defn split-whitespace

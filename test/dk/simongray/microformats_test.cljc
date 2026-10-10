@@ -52,6 +52,13 @@
          (mf/parse [:p {:class "h-card"} "Jane"] nil)
          (mf/parse [[:p {:class "h-card"} "Jane"]] nil))))
 
+(deftest rels-in-lower-case
+  (let [{:keys [rels rel-urls]} (mf/parse "<link rel=\"Webmention ME\" href=\"/wm\">" url)]
+    (is (= {"webmention" ["https://jane.example/wm"]
+            "me"         ["https://jane.example/wm"]}
+           rels))
+    (is (= ["me" "webmention"] (get-in rel-urls ["https://jane.example/wm" :rels])))))
+
 (deftest the-base-url
   (let [base "<base href=\"/blog/\"><base href=\"/other/\"><a class=\"h-card\" href=\"jane\">Jane</a>"]
     (is (= ["https://jane.example/blog/jane"]

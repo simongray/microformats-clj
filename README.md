@@ -96,7 +96,9 @@ are strings. A property name is always made of lower-case letters, digits
 and hyphens, so it makes a plain keyword. A rel value or a URL can hold
 any character, and a slash makes a keyword with a namespace, e.g. the
 `name` of the keyword of `http://a/b` is `/a/b`, which is also what
-data.json writes as its key.
+data.json writes as its key. Rel values are in lower case, since HTML
+compares them without regard to case, e.g. `rel="Webmention"` gives the
+key `"webmention"`.
 
 An e- property has its content as `:hiccup`, next to the `:html` and the
 `:value` of the spec. It goes straight into `html/hiccup` or

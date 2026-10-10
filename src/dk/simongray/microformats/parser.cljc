@@ -514,12 +514,14 @@
   [tag]
   (contains? #{:a :area :link} tag))
 
+;; the spec leaves the case of rel values open, and HTML compares them
+;; ASCII case-insensitively
 (defn add-rel
   "The `state` of the parse with the rels of the hyperlink element `node`,
-  resolved by `env`."
+  in lower case, and their URLs resolved by `env`."
   [env state node]
   (let [attrs (html/attrs node)
-        rels  (some-> (:rel attrs) str html/split-whitespace distinct)]
+        rels  (some-> (:rel attrs) str html/ascii-lower-case html/split-whitespace distinct)]
     (if (or (empty? rels) (not (contains? attrs :href)))
       state
       (let [u    (absolute env (:href attrs))

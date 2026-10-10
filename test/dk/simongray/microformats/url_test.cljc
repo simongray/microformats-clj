@@ -67,6 +67,15 @@
   (is (= "http://u:p@x/" (url/resolve "http://a/b" "http://u:p@x:0080/")))
   (is (= "foo://h/r" (url/resolve "foo://h/p/q" "../r"))))
 
+#?(:clj
+   (deftest whatever-the-locale
+     (let [default (java.util.Locale/getDefault)]
+       (try
+         (java.util.Locale/setDefault (java.util.Locale/forLanguageTag "tr"))
+         (is (= "https://wiki.example/" (url/resolve nil "HTTPS://WIKI.EXAMPLE")))
+         (finally
+           (java.util.Locale/setDefault default))))))
+
 (deftest opaque-and-invalid-urls
   (is (= "mailto:jane@example.com#top" (url/resolve "mailto:jane@example.com" "#top")))
   (is (nil? (url/resolve "mailto:jane@example.com" "x")))
