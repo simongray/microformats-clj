@@ -1,33 +1,20 @@
 Notes for html-pieces
 =====================
 
-What microformats-clj needed from html-pieces 0.2.0 while parsing whole
-pages, what it did instead, and what html-pieces could offer.
+What microformats-clj needed from html-pieces while parsing whole pages,
+what it did instead, and what html-pieces could offer. html-pieces has
+since taken on the URL resolver and the serializer, on its master at
+`eda80a9`, which microformats-clj now depends on.
 
 
 1. URL resolution
 -----------------
 
-**Needed.** Every u- property, implied photo and url, rel, and URL in the
-HTML of an e- property is resolved against the page URL and the first
-`<base>`, and normalized as a browser does. This has to work in `.cljc`.
-The html-pieces README has you call `java.net.URI` in `:url-fn`, which
-only works on the JVM, and `URI.resolve` doesn't normalize as a browser
-does, e.g. `HTTP://A:80/c/../d` stays as it is, where a browser gives
-`http://a/d`.
-
-**Did.** The namespace `dk.simongray.microformats.url` resolves by RFC
-3986, section 5, with the changes of the WHATWG URL Standard. Its
-`resolve` takes a base and a URL, and its `resolver` reads the base once
-for the many URLs of a page. It has no dependency on the rest of
-microformats-clj. Left out, as a TODO in
-its docstring: the host parser (IDNA, IPv4 in other bases, IPv6
-compression) and the drive letters of file URLs.
-
-**Could offer.** The namespace as it is, and a `:base-url` option, so that
-`hiccup` and `sanitize` keep relative URLs, resolved, where they now leave
-them out. The README's `:url-fn` example would then need no
-`java.net.URI`.
+**Done.** html-pieces has the namespace `dk.simongray.html-pieces.url`,
+with the `resolve` and `resolver` that microformats-clj wrote, and a
+`:base-url` option for `hiccup`, `sanitize`, `text` and `markdown`.
+microformats-clj resolves its URLs with `url/resolver`, and its own
+namespace is gone.
 
 
 2. Whole pages
@@ -63,18 +50,10 @@ namespace for whole pages, as the TODO of the tree builder says.
 3. Serializing unsanitized HTML
 -------------------------------
 
-**Needed.** The html of an e- property is the element's innerHTML, by
-13.3 of the HTML Standard. The serializer of html-pieces is for sanitized
-Hiccup and isn't public. It escapes the text of `<script>` and `<style>`,
-which 13.3 writes as it is, and writes a no-break space as itself rather
-than as `&nbsp;`.
-
-**Did.** The function `dk.simongray.microformats.html/html` follows 13.3,
-with the raw-text elements and `&nbsp;`, and with `<` and `>` escaped in
-attribute values, as the HTML Standard has done since 2025.
-
-**Could offer.** A public function that writes any Hiccup as HTML by 13.3,
-without sanitizing it, which `sanitize` would then be built on.
+**Done.** html-pieces has `serialize`, which writes HTML or Hiccup by 13.3
+of the HTML Standard without sanitizing it. microformats-clj writes the
+html of e- properties with it, and its own writer is gone. See 8 for a
+case where the result differs from the page.
 
 
 4. Comments
@@ -116,13 +95,14 @@ iterator, which made the walks of a page noticeably slower than `nth`.
 
 **Did.** The namespace `dk.simongray.microformats.html` has `element?`,
 `tag`, `attrs`, `children`, `reduce-children`, `strip` and
-`split-whitespace` of its own. It takes only the Hiccup of `parse`, with
-an optional attribute map.
+`split-whitespace` of its own. The `parse` of html-pieces now reads built
+Hiccup into the shape of parsed HTML, but it copies every element to do
+so, also of Hiccup that `parse` gave. So microformats-clj takes the Hiccup
+of `parse` as it is, and its README has you read built Hiccup with
+`parse` first.
 
-**Could offer.** These as public functions. Since 0.2.0, html-pieces reads
-built Hiccup, e.g. with seqs among the children, nil and shorthand tags,
-by `tree/canonical`. Made public, it would let microformats-clj take built
-Hiccup the same way.
+**Could offer.** `element?`, `parts` and a reduce over the children by
+index, as public functions.
 
 
 7. Keywords in ClojureScript
@@ -140,3 +120,18 @@ to the keyword literals of the code that reads them, and each lookup
 compares their names. If html-pieces put the literal keywords of the
 common tag and attribute names in its cache of keywords first, a lookup
 by a literal could succeed by `identical?`.
+
+
+8. Writing parsed Hiccup
+------------------------
+
+**Needed.** The html of an e- property as the page has it.
+
+**Did.** microformats-clj gives `serialize` the parsed Hiccup of the
+property. `serialize` reads it again as built Hiccup, so it reads a tag
+with a dot or a hash as shorthand: `<x-a.b>t</x-a.b>` comes out as
+`<x-a class="b">t</x-a>`. HTML allows a dot in the name of a custom
+element.
+
+**Could offer.** A way to write parsed Hiccup as it is, e.g. by reading
+shorthand only in Hiccup that `parse` didn't give.

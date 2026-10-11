@@ -76,6 +76,10 @@ Hiccup:
 (mf/parse tree "https://jane.example/posts/hello")
 ```
 
+The Hiccup is taken as `html/parse` gives it. To give `mf/parse` Hiccup
+that you've built yourself, read it with `html/parse` first, which gives
+it the same shape.
+
 The result
 ----------
 
