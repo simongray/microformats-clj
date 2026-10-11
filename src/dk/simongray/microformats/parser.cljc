@@ -567,11 +567,30 @@
 
 (def initial-state
   "The state of the parse of a document before its first node: the frame of
-  the document, whose children are the top-level microformats, and its
-  rels."
+  the document, whose children are the top-level microformats, its rels,
+  and the number of microformats that have begun."
   {:frame    {:top? true :children []}
    :rels     {}
-   :rel-urls {}})
+   :rel-urls {}
+   :begun    0})
+
+(defn position
+  "The place of the microformat `item` in the document order of its page,
+  counted from 0, or nil when it didn't come from a parse."
+  [item]
+  (::position (meta item)))
+
+(defn walk-rels
+  "The `state` of the parse by `env` with the rels of the Hiccup `node` and
+  of what it holds, outside templates, but not its microformats."
+  [env state node]
+  (if (and (html/element? node) (not= :template (html/tag node)))
+    (html/reduce-children #(walk-rels env %1 %2)
+                          (if (#{:a :area :link} (html/tag node))
+                            (add-rel env state node)
+                            state)
+                          node)
+    state))
 
 (declare walk)
 
@@ -621,13 +640,17 @@
   types, or nil."
   [env state node types props backcompat?]
   (let [frame      (:frame state)
+        begun      (:begun state)
         env        (assoc env :backcompat (when backcompat? types))
         [node env] (if backcompat? (with-includes env node) [node env])
         state      (html/reduce-children #(walk env %1 %2)
-                                         (assoc state :frame (new-frame))
+                                         (assoc state
+                                                :frame (new-frame)
+                                                :begun (inc begun))
                                          node)
         child      (:frame state)
-        item       (item env node types child)]
+        item       (with-meta (item env node types child)
+                     {::position begun})]
     (assoc state :frame (add-item env frame node props item child))))
 
 ;; inside a backcompat microformat, the class names that count are those of

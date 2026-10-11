@@ -93,6 +93,89 @@
            rels))
     (is (= ["me" "webmention"] (get-in rel-urls ["https://jane.example/wm" :rels])))))
 
+(deftest rels-alone
+  (is (= (select-keys (mf/parse post url) [:rels :rel-urls])
+         (mf/rels post url)
+         (mf/rels (html-pieces/parse post) url))
+      "as parse gives them, from HTML or Hiccup"))
+
+(deftest reading-the-items
+  (let [mf2     (mf/parse (str "<div class=\"h-entry\"><div class=\"h-card\">Ann</div>"
+                               "<span class=\"p-author p-organizer h-card\">Bo</span>"
+                               "<a class=\"u-in-reply-to h-cite\" href=\"https://example.org/post\">"
+                               "<span class=\"p-name\">Their post</span></a>"
+                               "<img class=\"u-photo\" src=\"/a.jpg\" alt=\"A cat\"></div>")
+                          url)
+        [entry] (:items mf2)]
+    (is (= [["h-entry"] ["h-card"] ["h-card"] ["h-cite"]] (map :type (mf/items mf2)))
+        "every microformat in document order, though a child is apart from the properties")
+    (is (= ["Ann" "Bo"] (map #(mf/property % :name) (mf/items mf2 "h-card")))
+        "of a type, and once though it's the value of two properties")
+    (is (= "Bo" (mf/property entry :author)) "the value of an embedded microformat")
+    (is (= "https://jane.example/a.jpg" (mf/property entry :photo)) "of an image with alt text")
+    (is (= ["https://example.org/post"] (mf/urls entry :in-reply-to)) "the url of an h-cite")
+    (is (= ["https://example.org/post"] (mf/urls {:properties {:in-reply-to ["HTTPS://Example.org:443/post" "a post"]}}
+                                                 :in-reply-to))
+        "the absolute URLs alone, made normal")))
+
+(deftest the-representative-card
+  (let [card #(mf/representative-card (mf/parse % url) url)]
+    (is (= ["Jane"]
+           (get-in (card (str "<p class=\"h-card\"><a class=\"p-name u-url\" href=\"/joe\">Joe</a></p>"
+                              "<p class=\"h-card\"><a class=\"p-name u-url u-uid\" href=\"HTTPS://Jane.Example/posts/hello\">Jane</a></p>"))
+                   [:properties :name]))
+        "the first whose url and uid are the page's, compared as URLs")
+    (is (= ["Jane"]
+           (get-in (card (str "<p class=\"h-card\"><a class=\"p-name u-url\" href=\"/joe\">Joe</a></p>"
+                              "<div class=\"h-feed\"><p class=\"p-author h-card\">"
+                              "<a class=\"p-name u-url\" href=\"https://jane.example/\">Jane</a></p></div>"
+                              "<a rel=\"me\" href=\"https://jane.example/\">me</a>"))
+                   [:properties :name]))
+        "or else the first whose url is a rel=me of the page, nested too")
+    (is (= ["Jane"]
+           (get-in (card "<p class=\"h-card\"><a class=\"p-name u-url\" href=\"\">Jane</a></p>")
+                   [:properties :name]))
+        "or else the only one, with the page's url")
+    (is (nil? (card (str "<p class=\"h-card\"><a class=\"p-name u-url\" href=\"\">Jane</a></p>"
+                         "<p class=\"h-card\">Joe</p>")))
+        "but not one of two")))
+
+(deftest the-author-of-an-entry
+  (let [author #(let [mf2 (mf/parse % url)]
+                  (mf/author mf2 url (first (mf/items mf2 "h-entry"))))]
+    (is (= {:card {:type       ["h-card"]
+                   :properties {:name ["Jane"] :url ["https://jane.example/"]}
+                   :value      "Jane"}}
+           (author "<article class=\"h-entry\"><a class=\"p-author h-card\" href=\"/\">Jane</a></article>"))
+        "an h-card")
+    (is (= {:page "https://jane.example/"}
+           (author "<article class=\"h-entry\"><a class=\"u-author\" href=\"/\">Jane</a></article>"))
+        "the URL of the author's page")
+    (is (= {:card {:type ["h-card"] :properties {:name ["Jane"]}}}
+           (author "<article class=\"h-entry\"><span class=\"p-author\">Jane</span></article>"))
+        "a name alone")
+    (is (= {:page "https://jane.example/"}
+           (author (str "<div class=\"h-feed\"><a class=\"u-author\" href=\"/\">Jane</a>"
+                        "<article class=\"h-entry\"><p class=\"p-name\">Hi</p></article></div>")))
+        "the author of the feed")
+    (is (= {:page "https://jane.example/about"}
+           (author (str "<a rel=\"author\" href=\"/about\">Jane</a>"
+                        "<article class=\"h-entry\"><a class=\"u-url\" href=\"\">Hi</a></article>")))
+        "a rel=author on the entry's permalink page")
+    (is (nil? (author (str "<a rel=\"author\" href=\"/about\">Jane</a>"
+                           "<article class=\"h-entry\"><a class=\"u-url\" href=\"/other\">Hi</a></article>")))
+        "but not on another page"))
+  (let [page "https://jane.example/"
+        mf2  (mf/parse "<p class=\"h-card\"><a class=\"u-url p-name\" href=\"/\">Jane here</a></p>" url)]
+    (is (= ["Jane there"]
+           (get-in (mf/author-card mf2 page (mf/parse (str "<p class=\"h-card\"><a class=\"p-name u-url u-uid\" href=\"/\">"
+                                                           "Jane there</a></p>")
+                                                      page))
+                   [:properties :name]))
+        "the h-card on the author's page")
+    (is (= ["Jane here"] (get-in (mf/author-card mf2 page nil) [:properties :name]))
+        "or else the h-card on the entry's page with the url of the author's page")))
+
 (def wordpress-post
   (str "<article id=\"post-1\" class=\"post-1 post hentry\">"
        "<h1 class=\"entry-title\"><a href=\"/hello/\" rel=\"bookmark\">Hello</a></h1>"
@@ -152,4 +235,10 @@
          (get-in (mf/parse (str "<template><base href=\"/blog/\"></template>"
                                 "<a class=\"h-card\" href=\"jane\">Jane</a>")
                            url)
-                 [:items 0 :properties :url]))))
+                 [:items 0 :properties :url])))
+  (is (= ["https://jane.example/posts/jane"]
+         (get-in (mf/parse (str "<base href=\"javascript:alert(1)\">"
+                                "<a class=\"h-card\" href=\"jane\">Jane</a>")
+                           url)
+                 [:items 0 :properties :url]))
+      "never a javascript: base, as in HTML"))

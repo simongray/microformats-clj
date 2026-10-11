@@ -32,7 +32,7 @@ It requires Clojure 1.11+ and Java 11+. Add it from
 `:deps` in your `deps.edn`:
 
 ```clojure
-dk.simongray/microformats-clj {:mvn/version "0.1.0"}
+dk.simongray/microformats-clj {:mvn/version "0.2.0"}
 ```
 
 Then parse a page, with the URL to resolve its relative URLs against:
@@ -112,8 +112,8 @@ URLs are resolved against the page URL and the first `<base>`, and
 normalized as a browser normalizes them, by the
 [URL Standard](https://url.spec.whatwg.org/). So an empty `href`, e.g. of
 a Webmention endpoint, gives the URL of the page itself, or of its
-`<base>` when it has one. When the URL of the page is nil and there's no `<base>`, relative
-URLs stay as they are.
+`<base>` when it has one. When the URL of the page is nil and there's no
+`<base>`, relative URLs stay as they are.
 
 A text value, e.g. of a p- property or the `:value` of an e- property, is
 the text content of its element, as the spec has it, but with a line
@@ -147,9 +147,46 @@ without a published date takes the `datetime` of its first
 `rel="author"` link. To apply them, pass `{:proposed-backcompat? true}`
 as the options of `mf/parse`.
 
-The [authorship](https://indieweb.org/authorship-spec) of an h-entry and
-the [representative h-card](https://microformats.org/wiki/representative-h-card-parsing)
-of a page have specs of their own, which this library leaves out.
+Reading the result
+------------------
+
+A few functions read the result of `mf/parse`:
+
+- `mf/items` gives every microformat of the page, at any depth and in
+  document order, or those of one type.
+- `mf/property` gives the first value of a property as text, whether
+  it's a string or an embedded microformat, and `mf/value` gives the
+  text of one value.
+- `mf/urls` gives the URLs of a property, with the url of an embedded
+  h-cite, made normal, so that you can compare them.
+
+```clojure
+(def entry (first (mf/items result "h-entry")))
+
+(mf/property entry :author)
+;; => "Jane"
+```
+
+The [representative h-card](https://microformats.org/wiki/representative-h-card-parsing)
+of a page and the [authorship](https://indieweb.org/authorship-spec) of
+an h-entry have specs of their own, which `mf/representative-card` and
+`mf/author` follow:
+
+```clojure
+(mf/author result "https://jane.example/posts/hello" entry)
+;; => {:card {:type       ["h-card"]
+;;            :properties {:name ["Jane"] :url ["https://jane.example/"]}
+;;            :value      "Jane"}}
+```
+
+An entry can also name its author by the URL of a page alone, and then
+`mf/author` gives that URL as the `:page`. The library doesn't fetch
+anything, so fetch the page and parse it yourself, and `mf/author-card`
+finds the author's h-card there, or else on the entry's page.
+
+For the rels of a page alone, e.g. its rel=me links, use `mf/rels`,
+which gives the `:rels` and `:rel-urls` of `mf/parse` without parsing
+the microformats.
 
 Principles
 ----------
