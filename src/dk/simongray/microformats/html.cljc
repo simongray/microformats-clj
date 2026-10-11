@@ -5,7 +5,8 @@
   The Hiccup is that of html-pieces: an element is a vector of a keyword
   tag, an optional map of attributes and the children, and text is a
   string."
-  (:require [clojure.string :as str])
+  (:require [clojure.string :as str]
+            [dk.simongray.html-pieces :as html-pieces])
   #?(:cljs (:import [goog.string StringBuffer])))
 
 (defn element?
@@ -124,23 +125,77 @@
   whose content is outside the document."
   #{:script :style :template})
 
+(def block-tags
+  "The elements that start and end a line of text, which html-pieces sets
+  off in its text."
+  (into html-pieces/paragraph-tags html-pieces/line-tags))
+
+;; the textContent of the DOM runs words together where the HTML has no
+;; whitespace between blocks, e.g. <p>One.</p><p>Two</p>
 (defn text
   "The text content of the Hiccup `nodes`, without the content of the
   ignored-tags, and with each img as the text that `img-text` gives of its
-  attributes, if any."
+  attributes, if any. A br is a line break, and so are the start and the
+  end of an element of block-tags, where there's no whitespace on either
+  side of them."
+  [nodes img-text]
+  (let [b        (builder)
+        space?   (volatile! true)
+        pending? (volatile! false)]
+    (letfn [(add! [s]
+              (when (seq s)
+                (when (and @pending? (not (whitespace-at? s 0)))
+                  (append! b "\n"))
+                (vreset! pending? false)
+                (append! b s)
+                (vreset! space? (whitespace-at? s (dec (count s))))))
+            ;; the break waits for the next text, which may start with
+            ;; whitespace of its own
+            (break! []
+              (when-not @space?
+                (vreset! pending? true)))
+            (node [_ x]
+              (cond
+                (string? x)  (add! x)
+                (element? x) (let [tag (tag x)]
+                               (cond
+                                 (ignored-tags tag) nil
+                                 (= :img tag)       (some-> (img-text (attrs x)) add!)
+                                 (= :br tag)        (add! "\n")
+                                 (block-tags tag)   (do (break!)
+                                                        (reduce-children node nil x)
+                                                        (break!))
+                                 :else              (reduce-children node nil x)))))]
+      (reduce node nil nodes)
+      (str b))))
+
+;; https://microformats.org/wiki/textcontent-parsing, a draft that php-mf2
+;; and mf2py follow, but which the microformats/tests suite doesn't
+(defn collapsed-text
+  "The text content of the Hiccup `nodes` with its whitespace collapsed,
+  without the content of the ignored-tags, and with each img as the text
+  that `img-text` gives of its attributes, if any, between spaces. A br is
+  a line break, and so is the start of a p."
   [nodes img-text]
   (let [b (builder)]
     (letfn [(node [_ x]
               (cond
-                (string? x)  (append! b x)
+                (string? x)  (append! b (str/replace x #"[\t\n\r]" " "))
                 (element? x) (let [tag (tag x)]
                                (cond
                                  (ignored-tags tag) nil
                                  (= :img tag)       (some->> (img-text (attrs x))
+                                                             strip
+                                                             (#(str " " % " "))
                                                              (append! b))
+                                 (= :br tag)        (append! b "\n")
+                                 (= :p tag)         (do (append! b "\n")
+                                                        (reduce-children node nil x))
                                  :else              (reduce-children node nil x)))))]
       (reduce node nil nodes)
-      (str b))))
+      (str/replace (str b)
+                   #"^[\t\n\f\r ]+| +(?=\n)|(?<=\n) +| +(?= )|[\t\n\f\r ]+$"
+                   ""))))
 
 (defn update-attrs
   "The Hiccup `nodes` with the attributes of each element changed by `f`,

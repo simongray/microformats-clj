@@ -12,8 +12,12 @@
     http://example.test/
   - the unit tests of microformats-v2-unit accept a time zone with or
     without a colon, e.g. +00:00 or +0000, as their comments tell
-  - an item whose result depends on how a browser builds the tree of a
-    whole page is left out, by its type, as `tree-builder-types` lists"
+  - an item that depends on how a browser builds the tree of a whole page,
+    or that the suite contradicts itself on, is left out by its type, as
+    skipped-items lists
+
+  The unit tests run with :collapse-whitespace? too, since they're written
+  to pass with or without it."
   (:require #?(:cljs ["fs" :as fs])
             #?(:clj [clojure.data.json :as json])
             #?(:clj [clojure.java.io :as io])
@@ -137,9 +141,11 @@
 
 (defn actual
   "The JSON form of the parse of the HTML `s` of a case at the base URL
-  `url`."
-  [s url]
-  (json-form (mf/parse s url)))
+  `url`, by `opts`."
+  ([s url]
+   (actual s url {}))
+  ([s url opts]
+   (json-form (mf/parse s url opts))))
 
 (defn failures
   "The cases of the `suite` that fail at the base URL `url`, but those
@@ -155,12 +161,14 @@
      {:name name :expected expected :actual actual})))
 
 (defn- check-suite
-  [suite url skipped]
-  (doseq [{:keys [name html expected]} (cases suite)
-          :when (not (skipped name))]
-    (testing name
-      (is (= (comparable suite name expected)
-             (comparable suite name (actual html url)))))))
+  ([suite url skipped]
+   (check-suite suite url skipped {}))
+  ([suite url skipped opts]
+   (doseq [{:keys [name html expected]} (cases suite)
+           :when (not (skipped name))]
+     (testing name
+       (is (= (comparable suite name expected)
+              (comparable suite name (actual html url opts))))))))
 
 (def mixed-microformats1
   "The cases of microformats-mixed that need the microformats1 classes."
@@ -174,6 +182,10 @@
 
 (deftest microformats-v2-unit
   (check-suite "microformats-v2-unit" "http://example.test/" #{}))
+
+(deftest microformats-v2-unit-with-whitespace-collapsed
+  (check-suite "microformats-v2-unit" "http://example.test/" #{}
+               {:collapse-whitespace? true}))
 
 (deftest microformats-mixed
   (check-suite "microformats-mixed" "http://example.com/" mixed-microformats1))

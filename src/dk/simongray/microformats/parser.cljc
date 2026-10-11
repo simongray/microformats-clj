@@ -7,6 +7,10 @@
   the spec allows. The value-class-pattern is that of
   https://microformats.org/wiki/value-class-pattern
 
+  The functions of the parse take its `env`, a map of :absolute, a function
+  that makes a URL absolute, and :text, a function of Hiccup nodes and of
+  the text of an img that gives their text, e.g. html/text.
+
   TODO: the microformats1 classes, which the spec reads as backcompat
   roots and properties."
   (:require [clojure.string :as str]
@@ -105,10 +109,10 @@
 ;; Images and text
 
 (defn img-value
-  "The URL of the img with the attributes `attrs`, made absolute by
-  `absolute`, and its alt text when it has one, by 1.5, \"parse an img
-  element for src and alt\"."
-  [absolute attrs]
+  "The URL of the img with the attributes `attrs`, made absolute by `env`,
+  and its alt text when it has one, by 1.5, \"parse an img element for src
+  and alt\"."
+  [{:keys [absolute] :as env} attrs]
   (let [src (absolute (:src attrs))]
     (if (contains? attrs :alt)
       {:value src :alt (:alt attrs)}
@@ -116,20 +120,20 @@
 
 (defn img-text
   "The text of the img with the attributes `attrs` in the value of a p- or
-  an e- property: its alt text, or else its URL, made absolute by
-  `absolute`, between spaces."
-  [absolute attrs]
+  an e- property: its alt text, or else its URL, made absolute by `env`,
+  between spaces."
+  [{:keys [absolute] :as env} attrs]
   (cond
     (contains? attrs :alt) (:alt attrs)
     (contains? attrs :src) (str " " (absolute (:src attrs)) " ")))
 
 (defn text
-  "The text content of the element `node`, stripped, with each img as the
+  "The text of the element `node`, by `env`, stripped, with each img as the
   text that `img-text` gives of its attributes, if any."
-  ([node]
-   (text node (constantly nil)))
-  ([node img-text]
-   (html/strip (html/text (html/children node) img-text))))
+  ([env node]
+   (text env node (constantly nil)))
+  ([env node img-text]
+   (html/strip ((:text env) (html/children node) img-text))))
 
 ;; Value class pattern
 
@@ -155,17 +159,17 @@
     (walk [] node)))
 
 (defn value-text
-  "The text of the value element `node`, with the elements that hold it in
-  an attribute of `attributes`, a map of tag to attribute."
-  [attributes node]
+  "The text of the value element `node`, by `env`, with the elements that
+  hold it in an attribute of `attributes`, a map of tag to attribute."
+  [env attributes node]
   (let [attrs (html/attrs node)
         k     (get attributes (html/tag node))]
     (cond
       (some #{"value-title"} (class-names attrs)) (str (:title attrs))
       (and k (contains? attrs k))                 (get attrs k)
       (#{:img :area} (html/tag node))             ""
-      :else                                       (html/text (html/children node)
-                                                             (constantly nil)))))
+      :else                                       ((:text env) (html/children node)
+                                                                (constantly nil)))))
 
 (def value-attributes
   "The attribute that holds the value of a value element, by tag."
@@ -177,30 +181,29 @@
   (assoc value-attributes :del :datetime :ins :datetime :time :datetime))
 
 (defn value-class-text
-  "The value of the property element `node` by the value-class-pattern: its
-  value elements concatenated, or nil when it has none."
-  [node]
+  "The value of the property element `node` by the value-class-pattern and
+  `env`: its value elements concatenated, or nil when it has none."
+  [env node]
   (when-let [elements (seq (value-elements node))]
-    (apply str (map #(value-text value-attributes %) elements))))
+    (apply str (map #(value-text env value-attributes %) elements))))
 
 ;; Properties
 
 (defn p-value
-  "The value of the p- property element `node`, by 1.3.1, with the URLs of
-  its images made absolute by `absolute`."
-  [absolute node]
+  "The value of the p- property element `node`, by 1.3.1 and `env`."
+  [env node]
   (let [tag   (html/tag node)
         attrs (html/attrs node)]
-    (or (value-class-text node)
+    (or (value-class-text env node)
         (when (#{:abbr :link} tag) (:title attrs))
         (when (#{:data :input} tag) (:value attrs))
         (when (#{:img :area} tag) (:alt attrs))
-        (text node #(img-text absolute %)))))
+        (text env node #(img-text env %)))))
 
 (defn u-value
   "The value of the u- property element `node`, by 1.3.2, made absolute by
-  `absolute`."
-  [absolute node]
+  `env`."
+  [{:keys [absolute] :as env} node]
   (let [tag   (html/tag node)
         attrs (html/attrs node)
         has?  #(contains? attrs %)]
@@ -209,7 +212,7 @@
       (absolute (:href attrs))
 
       (and (= :img tag) (has? :src))
-      (img-value absolute attrs)
+      (img-value env attrs)
 
       (and (#{:audio :video :source :iframe} tag) (has? :src))
       (absolute (:src attrs))
@@ -221,41 +224,41 @@
       (absolute (:data attrs))
 
       :else
-      (absolute (or (value-class-text node)
+      (absolute (or (value-class-text env node)
                     (when (= :abbr tag) (:title attrs))
                     (when (#{:data :input} tag) (:value attrs))
-                    (text node))))))
+                    (text env node))))))
 
 (defn- dt-text
-  "The text of the dt- property element `node` without the
+  "The text of the dt- property element `node` by `env`, without the
   value-class-pattern."
-  [node]
+  [env node]
   (let [tag   (html/tag node)
         attrs (html/attrs node)]
     (cond
       (and (#{:time :ins :del} tag) (contains? attrs :datetime)) (:datetime attrs)
       (and (= :abbr tag) (contains? attrs :title))               (:title attrs)
       (and (#{:data :input} tag) (contains? attrs :value))       (:value attrs)
-      :else                                                      (text node))))
+      :else                                                      (text env node))))
 
 (defn dt-value
-  "The value of the dt- property element `node`, by 1.3.3: a text, or a map
-  of a :time and a :zone when it's a time without a date, which takes the
-  date of another dt- property."
-  [node]
+  "The value of the dt- property element `node`, by 1.3.3 and `env`: a
+  text, or a map of a :time and a :zone when it's a time without a date,
+  which takes the date of another dt- property."
+  [env node]
   (if-let [parts (some->> (seq (value-elements node))
-                          (map #(value-text datetime-value-attributes %))
+                          (map #(value-text env datetime-value-attributes %))
                           (datetime/combined))]
     (cond-> parts (:date parts) datetime/text)
-    (let [s (dt-text node)]
+    (let [s (dt-text env node)]
       (or (datetime/time-only (html/strip s)) s))))
 
 ;; microformats2-parsing issue 38, which the tests of microformats/tests
 ;; follow
 (defn absolute-urls
-  "The attributes `attrs` with their URLs made absolute by `absolute`, but
-  those that are a fragment alone, e.g. #top."
-  [absolute attrs]
+  "The attributes `attrs` with their URLs made absolute by `env`, but those
+  that are a fragment alone, e.g. #top."
+  [{:keys [absolute] :as env} attrs]
   (reduce-kv (fn [m k v]
                (if (and (html-pieces/url-attributes k)
                         (string? v)
@@ -266,26 +269,25 @@
              attrs))
 
 (defn e-value
-  "The value of the e- property element `node`, by 1.3.4: a map of its
-  :html and its text :value, and its content as :hiccup, with the URLs in
-  each made absolute by `absolute`."
-  [absolute node]
+  "The value of the e- property element `node`, by 1.3.4 and `env`: a map
+  of its :html and its text :value, and its content as :hiccup, with
+  absolute URLs in each."
+  [env node]
   (let [nodes (-> (html/children node)
-                  (html/update-attrs (fn [_ attrs] (absolute-urls absolute attrs)))
+                  (html/update-attrs (fn [_ attrs] (absolute-urls env attrs)))
                   (html/trimmed))]
     {:html   (html/strip (html-pieces/serialize nodes))
-     :value  (html/strip (html/text nodes #(img-text absolute %)))
+     :value  (html/strip ((:text env) nodes #(img-text env %)))
      :hiccup (apply list nodes)}))
 
 (defn property-value
-  "The value of the property element `node` of the `prefix`, with its URLs
-  made absolute by `absolute`."
-  [absolute prefix node]
+  "The value of the property element `node` of the `prefix`, by `env`."
+  [env prefix node]
   (case prefix
-    "p"  (p-value absolute node)
-    "u"  (u-value absolute node)
-    "dt" (dt-value node)
-    "e"  (e-value absolute node)))
+    "p"  (p-value env node)
+    "u"  (u-value env node)
+    "dt" (dt-value env node)
+    "e"  (e-value env node)))
 
 ;; Implied properties, 1.3.5
 
@@ -316,15 +318,15 @@
     (not-empty (get (html/attrs node) k))))
 
 (defn implied-name
-  "The name implied by the microformat element `node`."
-  [node]
+  "The name implied by the microformat element `node`, by `env`."
+  [env node]
   (let [tag   (html/tag node)
         attrs (html/attrs node)]
     (html/strip (or (when (#{:img :area} tag) (:alt attrs))
                     (when (= :abbr tag) (:title attrs))
                     (some-> (only-child node) non-empty-name)
                     (some-> (only-child node) only-child non-empty-name)
-                    (text node :alt)))))
+                    (text env node :alt)))))
 
 (defn- implied
   "The value that `value-of` gives of the microformat element `node`, or
@@ -338,47 +340,47 @@
         (some-> (only-child node) of-child))))
 
 (defn- photo-of
-  "The photo of the img or object element `node`, made absolute by
-  `absolute`, or nil."
-  [absolute node]
+  "The photo of the img or object element `node`, made absolute by `env`,
+  or nil."
+  [{:keys [absolute] :as env} node]
   (let [attrs (html/attrs node)]
     (case (html/tag node)
-      :img    (when (contains? attrs :src) (img-value absolute attrs))
+      :img    (when (contains? attrs :src) (img-value env attrs))
       :object (some-> (:data attrs) absolute)
       nil)))
 
 (defn implied-photo
   "The photo implied by the microformat element `node`, made absolute by
-  `absolute`, or nil."
-  [absolute node]
-  (implied #(photo-of absolute %) [:img :object] node))
+  `env`, or nil."
+  [env node]
+  (implied #(photo-of env %) [:img :object] node))
 
 (defn- url-of
-  "The URL of the a or area element `node`, made absolute by `absolute`, or
+  "The URL of the a or area element `node`, made absolute by `env`, or
   nil."
-  [absolute node]
+  [{:keys [absolute] :as env} node]
   (when (#{:a :area} (html/tag node))
     (some-> (:href (html/attrs node)) absolute)))
 
 (defn implied-url
   "The URL implied by the microformat element `node`, made absolute by
-  `absolute`, or nil."
-  [absolute node]
-  (implied #(url-of absolute %) [:a :area] node))
+  `env`, or nil."
+  [env node]
+  (implied #(url-of env %) [:a :area] node))
 
 (defn with-implied
   "The `properties` of the microformat element `node` with the name, photo
-  and url that it implies, made absolute by `absolute`, by the `prefixes`
-  of its properties and whether it has `nested?` microformats."
-  [absolute node properties prefixes nested?]
+  and url that it implies by `env`, by the `prefixes` of its properties and
+  whether it has `nested?` microformats."
+  [env node properties prefixes nested?]
   (let [imply? (fn [k blocking]
                  (not (or (contains? properties k)
                           (some prefixes blocking)
                           nested?)))
-        photo  (when (imply? :photo ["u"]) (implied-photo absolute node))
-        u      (when (imply? :url ["u"]) (implied-url absolute node))]
+        photo  (when (imply? :photo ["u"]) (implied-photo env node))
+        u      (when (imply? :url ["u"]) (implied-url env node))]
     (cond-> properties
-      (imply? :name ["p" "e"]) (assoc :name [(implied-name node)])
+      (imply? :name ["p" "e"]) (assoc :name [(implied-name env node)])
       photo                    (assoc :photo [photo])
       u                        (assoc :url [u]))))
 
@@ -426,13 +428,12 @@
 
 (defn- add-properties
   "The microformat `frame` with the properties of the classes `props` of
-  the element `node`, made absolute by `absolute`, and the path to each
-  dt- value."
-  [absolute frame node props]
+  the element `node`, parsed by `env`, and the path to each dt- value."
+  [env frame node props]
   (reduce (fn [frame [prefix n]]
             (let [k    (keyword n)
                   path [k (count (get-in frame [:properties k]))]]
-              (cond-> (add-value frame prefix k (property-value absolute prefix node))
+              (cond-> (add-value frame prefix k (property-value env prefix node))
                 (= "dt" prefix) (update :dts conj path))))
           frame
           props))
@@ -440,12 +441,12 @@
 (defn item
   "The microformat of the element `node`, of the root `types`, whose
   properties and children are in `frame`, with the properties it implies
-  made absolute by `absolute`."
-  [absolute node types frame]
+  by `env`."
+  [env node types frame]
   (let [{:keys [properties prefixes dts children]} frame
         nested?    (or (seq children)
                        (some :type (filter map? (apply concat (vals properties)))))
-        properties (with-implied absolute
+        properties (with-implied env
                                  node
                                  (with-dates properties dts)
                                  prefixes
@@ -466,28 +467,27 @@
 
 (defn- nested-value
   "The value of the microformat `item` of the element `node` as a property
-  of the `prefix`, by 1.2 and the `frame` of its parse, made absolute by
-  `absolute`."
-  [absolute prefix node item frame]
+  of the `prefix`, by 1.2, `env` and the `frame` of its parse."
+  [env prefix node item frame]
   (case prefix
     "p"  {:value (or (first-value frame item :p-name :name)
-                     (p-value absolute node))}
-    "e"  (e-value absolute node)
+                     (p-value env node))}
+    "e"  (e-value env node)
     "u"  {:value (or (first-value frame item :u-url :url)
-                     (u-value absolute node))}
-    "dt" (let [v (dt-value node)]
+                     (u-value env node))}
+    "dt" (let [v (dt-value env node)]
            {:value (if (map? v) (datetime/text v) v)})))
 
 (defn- add-item
   "The `frame` of the parent microformat, or of the document, with the
   microformat `item` of the element `node` added: as the value of its
-  properties `props`, made absolute by `absolute`, or else as a child. The
-  `child` is the frame of the parse of the item."
-  [absolute frame node props item child]
+  properties `props`, by `env`, or else as a child. The `child` is the
+  frame of the parse of the item."
+  [env frame node props item child]
   (if (seq props)
     (reduce (fn [frame [prefix n]]
               (add-value frame prefix (keyword n)
-                         (merge item (nested-value absolute prefix node item child))))
+                         (merge item (nested-value env prefix node item child))))
             frame
             props)
     (update frame :children conj item)))
@@ -498,15 +498,15 @@
 ;; ASCII case-insensitively
 (defn add-rel
   "The `state` of the parse with the rels of the hyperlink element `node`,
-  in lower case, and their URLs made absolute by `absolute`."
-  [absolute state node]
+  in lower case, and their URLs made absolute by `env`."
+  [{:keys [absolute] :as env} state node]
   (let [attrs (html/attrs node)
         rels  (some-> (:rel attrs) str html/ascii-lower-case html/split-whitespace distinct)]
     (if (or (empty? rels) (not (contains? attrs :href)))
       state
       (let [u    (absolute (:href attrs))
             seen (set (get-in state [:rel-urls u :rels]))
-            text (html/text (html/children node) (constantly nil))
+            text ((:text env) (html/children node) (constantly nil))
             info (cond-> (select-keys attrs [:hreflang :media :title :type])
                    (seq text) (assoc :text text))]
         (-> (reduce (fn [state rel]
@@ -530,38 +530,37 @@
 (declare walk)
 
 (defn- walk-classes
-  "The `state` of the parse after the element `node` of the class names
-  `classes`, which can be a microformat or a property, with URLs made
-  absolute by `absolute`."
-  [absolute state node classes]
+  "The `state` of the parse by `env` after the element `node` of the class
+  names `classes`, which can be a microformat or a property."
+  [env state node classes]
   (let [types (root-types classes)
         frame (:frame state)
         props (when-not (:top? frame) (property-classes classes))]
     (if (seq types)
-      (let [state (html/reduce-children #(walk absolute %1 %2)
+      (let [state (html/reduce-children #(walk env %1 %2)
                                         (assoc state :frame (new-frame))
                                         node)
             child (:frame state)
-            item  (item absolute node types child)]
-        (assoc state :frame (add-item absolute frame node props item child)))
-      (html/reduce-children #(walk absolute %1 %2)
+            item  (item env node types child)]
+        (assoc state :frame (add-item env frame node props item child)))
+      (html/reduce-children #(walk env %1 %2)
                             (cond-> state
-                              (seq props) (update :frame #(add-properties absolute % node props)))
+                              (seq props) (update :frame #(add-properties env % node props)))
                             node))))
 
 (defn walk
-  "The `state` of the parse after the Hiccup `node`, which isn't in a
-  template, with URLs made absolute by `absolute`."
-  [absolute state node]
+  "The `state` of the parse by `env` after the Hiccup `node`, which isn't
+  in a template."
+  [env state node]
   (if-not (html/element? node)
     state
     (let [tag (html/tag node)]
       (if (= :template tag)
         state
-        (let [state (if (#{:a :area :link} tag) (add-rel absolute state node) state)]
+        (let [state (if (#{:a :area :link} tag) (add-rel env state node) state)]
           (if-let [classes (microformat-class-names (html/attrs node))]
-            (walk-classes absolute state node classes)
-            (html/reduce-children #(walk absolute %1 %2) state node)))))))
+            (walk-classes env state node classes)
+            (html/reduce-children #(walk env %1 %2) state node)))))))
 
 (defn base-href
   "The href of the first base element of the Hiccup `nodes` that has one,

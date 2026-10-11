@@ -52,6 +52,35 @@
          (mf/parse [:p {:class "h-card"} "Jane"] nil)
          (mf/parse [[:p {:class "h-card"} "Jane"]] nil))))
 
+(defn- text-values
+  "The name and the text of the content of the first item that the HTML `s`
+  parses to, by `opts`."
+  [s opts]
+  (let [{:keys [name content]} (get-in (mf/parse s url opts) [:items 0 :properties])]
+    [(first name) (:value (first content))]))
+
+(def blocks
+  (str "<div class=\"h-entry\">"
+       "<p class=\"p-name\">(for 30 days).<br><br>In the app</p>"
+       "<div class=\"e-content\">"
+       "<p>One.</p><p>Two<br>three.</p><ul><li>a</li><li>b</li></ul><div>c</div>"
+       "</div></div>"))
+
+(def indented
+  "<div class=\"h-entry\"><p class=\"p-name\">\n  Last week the\n    community met</p></div>")
+
+(deftest text-values-with-breaks
+  (is (= ["(for 30 days).\n\nIn the app" "One.\nTwo\nthree.\na\nb\nc"]
+         (text-values blocks {})))
+  (is (= ["Last week the\n    community met" nil]
+         (text-values indented {}))))
+
+(deftest text-values-with-whitespace-collapsed
+  (is (= ["(for 30 days).\n\nIn the app" "One.\nTwo\nthree.abc"]
+         (text-values blocks {:collapse-whitespace? true})))
+  (is (= ["Last week the community met" nil]
+         (text-values indented {:collapse-whitespace? true}))))
+
 (deftest rels-in-lower-case
   (let [{:keys [rels rel-urls]} (mf/parse "<link rel=\"Webmention ME\" href=\"/wm\">" url)]
     (is (= {"webmention" ["https://jane.example/wm"]
