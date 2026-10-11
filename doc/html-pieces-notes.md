@@ -2,9 +2,8 @@ Notes for html-pieces
 =====================
 
 What microformats-clj needed from html-pieces while parsing whole pages,
-what it did instead, and what html-pieces could offer. html-pieces has
-since taken on the URL resolver and the serializer, on its master at
-`12aaa35`, which microformats-clj now depends on.
+what it did instead, and what html-pieces could offer. html-pieces 0.3.0
+has since taken on the URL resolver and the serializer.
 
 
 1. URL resolution
