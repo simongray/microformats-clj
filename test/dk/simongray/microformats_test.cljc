@@ -81,6 +81,11 @@
   (is (= ["Last week the community met" nil]
          (text-values indented {:collapse-whitespace? true}))))
 
+(deftest tags-as-they-are-written
+  (is (= "<x-a.b>t</x-a.b>"
+         (-> (mf/parse "<div class=\"h-entry\"><div class=\"e-content\"><x-a.b>t</x-a.b></div></div>" url)
+             (get-in [:items 0 :properties :content 0 :html])))))
+
 (deftest rels-in-lower-case
   (let [{:keys [rels rel-urls]} (mf/parse "<link rel=\"Webmention ME\" href=\"/wm\">" url)]
     (is (= {"webmention" ["https://jane.example/wm"]

@@ -276,7 +276,7 @@
   (let [nodes (-> (html/children node)
                   (html/update-attrs (fn [_ attrs] (absolute-urls env attrs)))
                   (html/trimmed))]
-    {:html   (html/strip (html-pieces/serialize nodes))
+    {:html   (html/strip (html-pieces/serialize nodes {:shorthand? false}))
      :value  (html/strip ((:text env) nodes #(img-text env %)))
      :hiccup (apply list nodes)}))
 

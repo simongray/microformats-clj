@@ -4,7 +4,7 @@ Notes for html-pieces
 What microformats-clj needed from html-pieces while parsing whole pages,
 what it did instead, and what html-pieces could offer. html-pieces has
 since taken on the URL resolver and the serializer, on its master at
-`eda80a9`, which microformats-clj now depends on.
+`12aaa35`, which microformats-clj now depends on.
 
 
 1. URL resolution
@@ -52,8 +52,7 @@ namespace for whole pages, as the TODO of the tree builder says.
 
 **Done.** html-pieces has `serialize`, which writes HTML or Hiccup by 13.3
 of the HTML Standard without sanitizing it. microformats-clj writes the
-html of e- properties with it, and its own writer is gone. See 8 for a
-case where the result differs from the page.
+html of e- properties with it, and its own writer is gone.
 
 
 4. Comments
@@ -125,13 +124,8 @@ by a literal could succeed by `identical?`.
 8. Writing parsed Hiccup
 ------------------------
 
-**Needed.** The html of an e- property as the page has it.
-
-**Did.** microformats-clj gives `serialize` the parsed Hiccup of the
-property. `serialize` reads it again as built Hiccup, so it reads a tag
-with a dot or a hash as shorthand: `<x-a.b>t</x-a.b>` comes out as
-`<x-a class="b">t</x-a>`. HTML allows a dot in the name of a custom
-element.
-
-**Could offer.** A way to write parsed Hiccup as it is, e.g. by reading
-shorthand only in Hiccup that `parse` didn't give.
+**Done.** `serialize` read parsed Hiccup again as built Hiccup, so a tag
+with a dot or a hash, which HTML allows, came out as shorthand, e.g.
+`<x-a.b>` as `<x-a class="b">`. html-pieces now has a `:shorthand?`
+option, and microformats-clj passes it as false when it writes the html
+of an e- property.
