@@ -115,6 +115,22 @@ a Webmention endpoint, is the page itself, or its `<base>` when it has
 one. When the URL of the page is nil and there's no `<base>`, relative
 URLs stay as they are.
 
+A text value, e.g. of a p- property or the `:value` of an e- property, is
+the text content of its element, as the spec has it, but with a line
+break at each `<br>`, and where a block element such as `<p>` or `<li>`
+would otherwise run two words together. The text keeps the whitespace of
+the page, as the test suite expects. To collapse it, as php-mf2 and mf2py
+do by a [draft](https://microformats.org/wiki/textcontent-parsing), pass
+an option:
+
+```clojure
+(mf/parse "<p class=\"h-card\">Jane\n   Doe</p>" nil)
+;; => {:items [{:type ["h-card"] :properties {:name ["Jane\n   Doe"]}}] …}
+
+(mf/parse "<p class=\"h-card\">Jane\n   Doe</p>" nil {:collapse-whitespace? true})
+;; => {:items [{:type ["h-card"] :properties {:name ["Jane Doe"]}}] …}
+```
+
 The [authorship](https://indieweb.org/authorship-spec) of an h-entry and
 the [representative h-card](https://microformats.org/wiki/representative-h-card-parsing)
 of a page have specs of their own, which this library leaves out.
