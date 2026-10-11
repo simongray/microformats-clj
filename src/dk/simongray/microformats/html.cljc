@@ -132,6 +132,10 @@
 
 ;; the textContent of the DOM runs words together where the HTML has no
 ;; whitespace between blocks, e.g. <p>One.</p><p>Two</p>
+;;
+;; TODO: this default may change in a 0.2. It differs a little from the
+;; textContent that the spec names, though the suite still passes, and
+;; issue 15 of microformats2-parsing, open since 2018, may settle it.
 (defn text
   "The text content of the Hiccup `nodes`, without the content of the
   ignored-tags, and with each img as the text that `img-text` gives of its

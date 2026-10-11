@@ -7,6 +7,12 @@
   the spec allows. The value-class-pattern is that of
   https://microformats.org/wiki/value-class-pattern
 
+  TODO: deeply nested microformats are slow to parse. 4 MB of 100,000
+  nested h-entries takes about 2.3 s on the JVM, ten times what
+  html-pieces/parse takes to read the page. The time grows in proportion
+  to the input, and a normal page adds 20-50% to the time of reading it,
+  as doc/benchmarks.md shows.
+
   The functions of the parse take its `env`, a map of:
 
   - :absolute, a function that makes a URL absolute
