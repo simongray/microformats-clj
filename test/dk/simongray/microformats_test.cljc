@@ -116,6 +116,13 @@
            :id         "post-1"}]
          (:items (mf/parse wordpress-post url)))))
 
+(deftest the-include-pattern
+  (let [names #(map (comp :name :properties) (:items (mf/parse % url)))]
+    (is (= [["Jane"]]
+           (names "<div id=\"x\"><p class=\"vcard\"><b class=\"fn\">Jane</b><a class=\"include\" href=\"#x\"></a></p></div>")))
+    (is (= [["Jane"] ["Joe"]]
+           (names "<p class=\"vcard\" id=\"a\" itemref=\"b\"><b class=\"fn\">Jane</b></p><p class=\"vcard\" id=\"b\" itemref=\"a\"><b class=\"fn\">Joe</b></p>")))))
+
 (deftest the-base-url
   (let [base "<base href=\"/blog/\"><base href=\"/other/\"><a class=\"h-card\" href=\"jane\">Jane</a>"]
     (is (= ["https://jane.example/blog/jane"]

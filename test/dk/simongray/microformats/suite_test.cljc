@@ -185,16 +185,8 @@
        (is (= (comparable suite name expected)
               (comparable suite name (actual html url opts))))))))
 
-(def includes
-  "The cases of microformats-v1 that need the include pattern."
-  #{"includes/hcarditemref"
-    "includes/heventitemref"
-    "includes/hyperlink"
-    "includes/object"
-    "includes/table"})
-
 (deftest microformats-v1
-  (check-suite "microformats-v1" "http://example.com/" includes))
+  (check-suite "microformats-v1" "http://example.com/" #{}))
 
 (deftest microformats-v2
   (check-suite "microformats-v2" "http://example.com/" #{}))

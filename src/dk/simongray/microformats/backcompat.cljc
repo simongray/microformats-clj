@@ -1,6 +1,7 @@
 (ns ^:no-doc dk.simongray.microformats.backcompat
   "The classes of microformats1 that the microformats2 parsing spec reads
-  as backcompat roots and properties.
+  as backcompat roots and properties, and the include pattern of
+  microformats1.
 
   The roots and properties are those of the Parser Compatibility section
   of each vocabulary on the microformats wiki, e.g.
@@ -203,3 +204,97 @@
   (->> (str/split (str/replace href #"[?#].*" "") #"/")
        (remove empty?)
        (last)))
+
+;; The include pattern: https://microformats.org/wiki/include-pattern
+
+(defn ids
+  "The elements of the Hiccup `nodes` by their ids, the first of each,
+  outside templates."
+  [nodes]
+  (letfn [(node [m x]
+            (if (and (html/element? x) (not= :template (html/tag x)))
+              (let [id (:id (html/attrs x))
+                    m  (cond-> m
+                         (and id (not (contains? m id))) (assoc id x))]
+                (html/reduce-children node m x))
+              m))]
+    (reduce node {} nodes)))
+
+(defn- class-names
+  [attrs]
+  (some-> (:class attrs) str html/split-whitespace))
+
+(defn- replacing-ref
+  "The id that the element `node` refers to as an include hyperlink or an
+  include object, which it's replaced by, or nil."
+  [node]
+  (let [attrs (html/attrs node)]
+    (when (some #{"include"} (class-names attrs))
+      (some->> (case (html/tag node) :a (:href attrs) :object (:data attrs) nil)
+               (str)
+               (re-matches #"#(.+)")
+               (second)))))
+
+;; https://microformats.org/wiki/hcard-parsing#Include_Pattern_and_Table_Headers
+;; and the itemref of microdata, which the tests of microformats/tests use
+(defn- added-refs
+  "The ids that the element `node` refers to by its itemref, or by its
+  headers when it's a td, whose elements are added after its children."
+  [node]
+  (let [attrs (html/attrs node)]
+    (concat (some-> (:itemref attrs) str html/split-whitespace)
+            (when (= :td (html/tag node))
+              (some-> (:headers attrs) str html/split-whitespace)))))
+
+(defn- own-element?
+  "Whether the element `x` belongs to the backcompat root element `node`: it
+  is the root, or it's neither a template nor a microformat by
+  `microformat?`."
+  [microformat? node x]
+  (or (identical? node x)
+      (not (or (= :template (html/tag x)) (microformat? x)))))
+
+(defn refs
+  "The ids that the element `node` of a backcompat root and its descendants
+  refer to by the include pattern, but not those of a microformat by
+  `microformat?` or inside one, which refer for themselves."
+  [microformat? node]
+  (let [own? (partial own-element? microformat? node)]
+    (->> (tree-seq own? html/element-children node)
+         (filter own?)
+         (mapcat #(cons (replacing-ref %) (added-refs %)))
+         (remove nil?)
+         (set))))
+
+(defn- contains-node?
+  "Whether the element `x` is the element `node` or contains it."
+  [x node]
+  (boolean (some #(identical? node %) (tree-seq html/element? html/children x))))
+
+(defn with-includes
+  "The element `node` of a backcompat root with what it and its descendants
+  include from `ids`, a delay of a map of id to element.
+
+  An include hyperlink or object is replaced by the element it refers to,
+  and the elements that an itemref or the headers of a td refer to are
+  added after the children. An element isn't included when its id is in
+  `excluded` or is that of an element around it, or when it contains
+  `node`, since the pattern ignores an include of an ancestor. A
+  descendant that's a microformat by `microformat?` is left as it is."
+  [ids excluded microformat? node]
+  (letfn [(target [seen id]
+            (when-let [x (get @ids id)]
+              (when-not (or (seen id) (contains-node? x node))
+                x)))
+          (child [seen x]
+            (if-not (and (html/element? x) (own-element? microformat? node x))
+              x
+              (if-let [y (some->> (replacing-ref x) (target seen))]
+                (child seen y)
+                (element seen x))))
+          (element [seen x]
+            (let [seen (cond-> seen (:id (html/attrs x)) (conj (:id (html/attrs x))))]
+              (into [(html/tag x) (html/attrs x)]
+                    (map #(child seen %))
+                    (concat (html/children x) (keep #(target seen %) (added-refs x))))))]
+    (element excluded node)))

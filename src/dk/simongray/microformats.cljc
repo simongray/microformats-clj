@@ -4,6 +4,7 @@
   https://microformats.org/wiki/microformats2-parsing"
   (:require [dk.simongray.html-pieces :as html-pieces]
             [dk.simongray.html-pieces.url :as url]
+            [dk.simongray.microformats.backcompat :as backcompat]
             [dk.simongray.microformats.html :as html]
             [dk.simongray.microformats.parser :as parser]))
 
@@ -52,7 +53,9 @@
          env      {:absolute #(or (resolver %) %)
                    :text     (if (:collapse-whitespace? opts)
                                html/collapsed-text
-                               html/text)}
+                               html/text)
+                   :ids      (delay (backcompat/ids nodes))
+                   :excluded #{}}
          state    (reduce #(parser/walk env %1 %2) parser/initial-state nodes)]
      {:items    (get-in state [:frame :children])
       :rels     (:rels state)

@@ -13,7 +13,11 @@
   - :text, a function of Hiccup nodes and of the text of an img that gives
     their text, e.g. html/text
   - :backcompat, the types of the backcompat microformat that a node is
-    in, or nil"
+    in, or nil
+  - :ids, a delay of the elements of the page by id, for the include
+    pattern of backcompat microformats
+  - :excluded, the ids that the backcompat microformats around a node
+    refer to, which it can't include again"
   (:require [clojure.string :as str]
             [dk.simongray.html-pieces :as html-pieces]
             [dk.simongray.microformats.backcompat :as backcompat]
@@ -118,6 +122,11 @@
   [classes]
   (boolean (or (seq (root-types classes))
                (seq (backcompat/root-types classes)))))
+
+(defn- microformat?
+  "Whether the element `node` has a root or a backcompat root class name."
+  [node]
+  (microformat-classes? (microformat-class-names (html/attrs node))))
 
 (defn- microformat-element?
   "Whether the element `node` is a microformat or a property, inside the
@@ -575,19 +584,32 @@
               (backcompat/rel-properties (:backcompat env) (rel-values attrs)))
       frame)))
 
+;; the ids that a root refers to are excluded inside it, so that includes
+;; that refer to each other end
+(defn- with-includes
+  "The backcompat root element `node` with what it includes by the include
+  pattern, and `env` with the ids it refers to excluded."
+  [env node]
+  (let [refs (backcompat/refs microformat? node)]
+    (if (empty? refs)
+      [node env]
+      [(backcompat/with-includes (:ids env) (:excluded env) microformat? node)
+       (update env :excluded into refs)])))
+
 (defn- walk-item
   "The `state` of the parse by `env` after the microformat element `node` of
   the root `types` and the property classes `props`, which is a backcompat
   microformat when `backcompat?`. Inside it, :backcompat in `env` is its
   types, or nil."
   [env state node types props backcompat?]
-  (let [frame (:frame state)
-        env   (assoc env :backcompat (when backcompat? types))
-        state (html/reduce-children #(walk env %1 %2)
-                                    (assoc state :frame (new-frame))
-                                    node)
-        child (:frame state)
-        item  (item env node types child)]
+  (let [frame      (:frame state)
+        env        (assoc env :backcompat (when backcompat? types))
+        [node env] (if backcompat? (with-includes env node) [node env])
+        state      (html/reduce-children #(walk env %1 %2)
+                                         (assoc state :frame (new-frame))
+                                         node)
+        child      (:frame state)
+        item       (item env node types child)]
     (assoc state :frame (add-item env frame node props item child))))
 
 ;; inside a backcompat microformat, the class names that count are those of
