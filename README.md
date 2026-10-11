@@ -8,10 +8,10 @@ parser for Clojure and ClojureScript. It reads the h-entries, h-cards and
 other microformats of a page, and its rel links, by the
 [microformats2 parsing specification](https://microformats.org/wiki/microformats2-parsing).
 
-- **To the spec.** It passes the microformats2 suites of the
+- **To the spec.** It passes the
   [microformats test suite](https://github.com/microformats/tests), with
-  the value-class-pattern, implied properties, nested microformats and
-  rels.
+  the value-class-pattern, implied properties, nested microformats, rels
+  and the classes of microformats1.
 - **One tree.** It reads HTML with
   [html-pieces](https://github.com/simongray/html-pieces), or takes the
   Hiccup that html-pieces has already read, so you can parse a page once
@@ -19,8 +19,7 @@ other microformats of a page, and its rel links, by the
 - **Plain data.** The result has the shape of the spec's JSON, with
   keywords for keys.
 
-The same code runs on the JVM, in Node and in the browser. It doesn't read
-the classes of microformats1, e.g. `vcard` or `hentry`, yet.
+The same code runs on the JVM, in Node and in the browser.
 
 > Like html-pieces, it was developed with assistance from frontier LLMs.
 
@@ -131,6 +130,13 @@ an option:
 ;; => {:items [{:type ["h-card"] :properties {:name ["Jane Doe"]}}] …}
 ```
 
+The classes of microformats1, e.g. `vcard` and `hentry`, are read as the
+spec's backcompat microformats, e.g. h-card and h-entry, by the mappings
+on the microformats wiki, and so are those of hNews. A backcompat
+microformat implies no name, photo or url, as the spec has it, and it
+can take properties from elsewhere on the page by the
+[include pattern](https://microformats.org/wiki/include-pattern).
+
 The [authorship](https://indieweb.org/authorship-spec) of an h-entry and
 the [representative h-card](https://microformats.org/wiki/representative-h-card-parsing)
 of a page have specs of their own, which this library leaves out.
@@ -142,9 +148,9 @@ Principles
   specification, and URLs the URL Standard. The code cites the sections
   that it implements.
 - **The suite decides.** Where the spec is unclear, the parser does what
-  the test suite expects. Where the suite contradicts itself, or depends
-  on how a browser builds the tree of a whole page, the tests skip that
-  part and say why.
+  the test suite expects. Where the suite contradicts itself, predates
+  the spec, or depends on how a browser builds the tree of a whole page,
+  the tests skip that part and say why.
 - **One walk.** The class and rel microformats are parsed in one walk of
   the tree, as the spec allows.
 - **One codebase.** The library is written in `.cljc`. Its only
