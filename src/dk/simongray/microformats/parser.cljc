@@ -273,7 +273,7 @@
   (let [nodes (-> (html/children node)
                   (html/update-attrs (fn [_ attrs] (absolute-urls absolute attrs)))
                   (html/trimmed))]
-    {:html   (html/strip (html/html nodes))
+    {:html   (html/strip (html-pieces/serialize nodes))
      :value  (html/strip (html/text nodes #(img-text absolute %)))
      :hiccup (apply list nodes)}))
 

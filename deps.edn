@@ -3,7 +3,8 @@
  ;; Clojure 1.11 is the floor, and the tests run on it unless an alias says
  ;; otherwise.
  :deps  {org.clojure/clojure      {:mvn/version "1.11.4"}
-         dk.simongray/html-pieces {:mvn/version "0.2.0"}}
+         dk.simongray/html-pieces {:git/url "https://github.com/simongray/html-pieces"
+                                   :git/sha "eda80a913afb59b0eb6999089bbf7ab87b5d3630"}}
 
  :aliases
  {;; clojure -X:test

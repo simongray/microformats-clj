@@ -3,9 +3,9 @@
   the microformats2 parsing specification:
   https://microformats.org/wiki/microformats2-parsing"
   (:require [dk.simongray.html-pieces :as html-pieces]
+            [dk.simongray.html-pieces.url :as url]
             [dk.simongray.microformats.html :as html]
-            [dk.simongray.microformats.parser :as parser]
-            [dk.simongray.microformats.url :as url]))
+            [dk.simongray.microformats.parser :as parser]))
 
 (defn- nodes-of
   "The Hiccup nodes of `x`: the HTML string `x` parsed, an element, or

@@ -20,8 +20,8 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [clojure.walk :as walk]
-            [dk.simongray.microformats :as mf]
-            [dk.simongray.microformats.url :as url]))
+            [dk.simongray.html-pieces.url :as url]
+            [dk.simongray.microformats :as mf]))
 
 (def dir
   "Where the test suites of microformats/tests are."

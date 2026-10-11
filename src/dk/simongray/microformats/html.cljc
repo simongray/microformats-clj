@@ -1,7 +1,6 @@
 (ns ^:no-doc dk.simongray.microformats.html
-  "Hiccup read as the DOM reads HTML: the parts of an element, its text
-  content, and its content as HTML, serialized by section 13.3 of the HTML
-  Standard.
+  "Hiccup read as the DOM reads HTML: the parts of an element and its text
+  content, and the ASCII whitespace and letters that HTML compares.
 
   The Hiccup is that of html-pieces: an element is a vector of a keyword
   tag, an optional map of attributes and the children, and text is a
@@ -141,80 +140,6 @@
                                                              (append! b))
                                  :else              (reduce-children node nil x)))))]
       (reduce node nil nodes)
-      (str b))))
-
-;; HTML Standard, 13.3, "Serializing HTML fragments", as of 2026-10-10
-
-(def void-elements
-  "The elements that are serialized without content or an end tag."
-  #{:area :base :basefont :bgsound :br :col :embed :frame :hr :img :input
-    :keygen :link :meta :param :source :track :wbr})
-
-(def raw-text-elements
-  "The elements whose text is serialized without escapes."
-  #{:style :script :xmp :iframe :noembed :noframes :plaintext})
-
-(defn- escape
-  "The escape of the character of the code `c`, in an attribute value when
-  `attr?`, or nil when it needs none."
-  [^long c attr?]
-  (case c
-    38  "&amp;"
-    160 "&nbsp;"
-    60  "&lt;"
-    62  "&gt;"
-    34  (when attr? "&quot;")
-    nil))
-
-(defn- escaped!
-  "Append the text `s` to the builder `b`, escaped, as an attribute value
-  when `attr?`."
-  [b ^String s attr?]
-  (let [n (count s)]
-    (loop [i 0 start 0]
-      (if (== i n)
-        (append! b (.substring s start n))
-        (if-let [e (escape (code-at s i) attr?)]
-          (do (append! b (.substring s start i))
-              (append! b e)
-              (recur (inc i) (inc i)))
-          (recur (inc i) start))))))
-
-(defn- attribute!
-  "Append the attribute named `k` of the value `v` to the builder `b`: the
-  name alone when `v` is true, and nothing when it's nil or false."
-  [b k v]
-  (when (and (some? v) (not (false? v)))
-    (append! b " ")
-    (append! b (name k))
-    (when-not (true? v)
-      (append! b "=\"")
-      (escaped! b (str v) true)
-      (append! b "\""))))
-
-(defn html
-  "The Hiccup `nodes` serialized as HTML, as the innerHTML of an element
-  whose children they are."
-  [nodes]
-  (let [b (builder)]
-    (letfn [(node [x raw?]
-              (cond
-                (string? x)  (if raw? (append! b x) (escaped! b x false))
-                (element? x) (element x)))
-            (element [x]
-              (let [tag (tag x)
-                    n   (name tag)]
-                (append! b "<")
-                (append! b n)
-                (run! (fn [[k v]] (attribute! b k v)) (attrs x))
-                (append! b ">")
-                (when-not (void-elements tag)
-                  (let [raw? (contains? raw-text-elements tag)]
-                    (reduce-children #(node %2 raw?) nil x))
-                  (append! b "</")
-                  (append! b n)
-                  (append! b ">"))))]
-      (run! #(node % false) nodes)
       (str b))))
 
 (defn update-attrs
