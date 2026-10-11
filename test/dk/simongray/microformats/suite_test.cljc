@@ -12,6 +12,8 @@
     http://example.test/
   - the unit tests of microformats-v2-unit accept a time zone with or
     without a colon, e.g. +00:00 or +0000, as their comments tell
+  - the tests of microformats-v1 compare an img as its URL alone, and an
+    item without its id, since they predate the alt and the id of the spec
   - an item that depends on how a browser builds the tree of a whole page,
     or that the suite contradicts itself on, is left out by its type, as
     skipped-items lists
@@ -95,6 +97,18 @@
                      x))
                  result))
 
+(defn without-alts-and-ids
+  "The `result` with each value of an img given as its URL alone, and its
+  items without their ids."
+  [result]
+  (walk/postwalk (fn [x]
+                   (cond
+                     (not (map? x))                      x
+                     (= #{"value" "alt"} (set (keys x))) (get x "value")
+                     (contains? x "type")                (dissoc x "id")
+                     :else                               x))
+                 result))
+
 (defn without-zone-colons
   "The `result` with the colon of each time zone at the end of a date and
   time taken out, e.g. 2000-01-01 00:00:00+0000."
@@ -137,6 +151,7 @@
   [suite name result]
   (cond-> (-> (normalized-urls result)
               (without-types (get-in skipped-items [name :types] #{})))
+    (= "microformats-v1" suite)      without-alts-and-ids
     (= "microformats-v2-unit" suite) without-zone-colons))
 
 (defn actual
@@ -170,12 +185,16 @@
        (is (= (comparable suite name expected)
               (comparable suite name (actual html url opts))))))))
 
-(def mixed-microformats1
-  "The cases of microformats-mixed that need the microformats1 classes."
-  #{;; adr inside an h-card
-    "h-card/mixedproperties"
-    ;; vcard and vevent inside an h-resume
-    "h-resume/mixedroots"})
+(def includes
+  "The cases of microformats-v1 that need the include pattern."
+  #{"includes/hcarditemref"
+    "includes/heventitemref"
+    "includes/hyperlink"
+    "includes/object"
+    "includes/table"})
+
+(deftest microformats-v1
+  (check-suite "microformats-v1" "http://example.com/" includes))
 
 (deftest microformats-v2
   (check-suite "microformats-v2" "http://example.com/" #{}))
@@ -188,9 +207,10 @@
                {:collapse-whitespace? true}))
 
 (deftest microformats-mixed
-  (check-suite "microformats-mixed" "http://example.com/" mixed-microformats1))
+  (check-suite "microformats-mixed" "http://example.com/" #{}))
 
 (comment
+  (map :name (failures "microformats-v1" "http://example.com/"))
   (map :name (failures "microformats-v2" "http://example.com/"))
   (map :name (failures "microformats-v2-unit" "http://example.test/"))
   (map :name (failures "microformats-mixed" "http://example.com/"))

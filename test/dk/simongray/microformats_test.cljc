@@ -93,6 +93,29 @@
            rels))
     (is (= ["me" "webmention"] (get-in rel-urls ["https://jane.example/wm" :rels])))))
 
+(def wordpress-post
+  (str "<article id=\"post-1\" class=\"post-1 post hentry\">"
+       "<h1 class=\"entry-title\"><a href=\"/hello/\" rel=\"bookmark\">Hello</a></h1>"
+       "<div class=\"entry-content\"><p>Hi.</p></div>"
+       "<footer>In <a href=\"/category/news/\" rel=\"category tag\">News</a> "
+       "by <span class=\"author vcard\"><a class=\"url fn n\" href=\"/author/jane/\">Jane</a></span>"
+       "</footer></article>"))
+
+(deftest a-backcompat-entry
+  (is (= [{:type       ["h-entry"]
+           :properties {:name     ["Hello"]
+                        :url      ["https://jane.example/hello/"]
+                        :content  [{:html   "<p>Hi.</p>"
+                                    :value  "Hi."
+                                    :hiccup '([:p {} "Hi."])}]
+                        :category ["news"]
+                        :author   [{:type       ["h-card"]
+                                    :properties {:url  ["https://jane.example/author/jane/"]
+                                                 :name ["Jane"]}
+                                    :value      "Jane"}]}
+           :id         "post-1"}]
+         (:items (mf/parse wordpress-post url)))))
+
 (deftest the-base-url
   (let [base "<base href=\"/blog/\"><base href=\"/other/\"><a class=\"h-card\" href=\"jane\">Jane</a>"]
     (is (= ["https://jane.example/blog/jane"]

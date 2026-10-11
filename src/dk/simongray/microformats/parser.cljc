@@ -7,14 +7,16 @@
   the spec allows. The value-class-pattern is that of
   https://microformats.org/wiki/value-class-pattern
 
-  The functions of the parse take its `env`, a map of :absolute, a function
-  that makes a URL absolute, and :text, a function of Hiccup nodes and of
-  the text of an img that gives their text, e.g. html/text.
+  The functions of the parse take its `env`, a map of:
 
-  TODO: the microformats1 classes, which the spec reads as backcompat
-  roots and properties."
+  - :absolute, a function that makes a URL absolute
+  - :text, a function of Hiccup nodes and of the text of an img that gives
+    their text, e.g. html/text
+  - :backcompat, the types of the backcompat microformat that a node is
+    in, or nil"
   (:require [clojure.string :as str]
             [dk.simongray.html-pieces :as html-pieces]
+            [dk.simongray.microformats.backcompat :as backcompat]
             [dk.simongray.microformats.datetime :as datetime]
             [dk.simongray.microformats.html :as html]))
 
@@ -50,7 +52,8 @@
 ;; which a search of the text of the attribute tells fastest
 (defn microformat-class-names
   "The class names of the element with the attributes `attrs`, when one of
-  them can be a root or a property class name, or else nil."
+  them can be a root, a property or a backcompat root class name, or else
+  nil."
   [attrs]
   (when-let [s (:class attrs)]
     (let [s (str s)]
@@ -58,7 +61,17 @@
                 (str/includes? s "p-")
                 (str/includes? s "u-")
                 (str/includes? s "e-")
-                (str/includes? s "dt-"))
+                (str/includes? s "dt-")
+                (str/includes? s "vcard")
+                (str/includes? s "vevent")
+                (str/includes? s "adr")
+                (str/includes? s "geo")
+                (str/includes? s "hentry")
+                (str/includes? s "hfeed")
+                (str/includes? s "hnews")
+                (str/includes? s "hproduct")
+                ;; hrecipe, hresume, hreview and hreview-aggregate
+                (str/includes? s "hre"))
         (html/split-whitespace s)))))
 
 (defn- root-class?
@@ -99,12 +112,23 @@
   [node]
   (boolean (seq (root-types (microformat-class-names (html/attrs node))))))
 
+(defn- microformat-classes?
+  "Whether the class names `classes` have a root or a backcompat root class
+  name."
+  [classes]
+  (boolean (or (seq (root-types classes))
+               (seq (backcompat/root-types classes)))))
+
 (defn- microformat-element?
-  "Whether the element `node` has a root or a property class name."
-  [node]
-  (let [classes (microformat-class-names (html/attrs node))]
-    (boolean (or (seq (root-types classes))
-                 (seq (property-classes classes))))))
+  "Whether the element `node` is a microformat or a property, inside the
+  backcompat microformat of `env`, if any."
+  [env node]
+  (let [attrs   (html/attrs node)
+        types   (:backcompat env)
+        classes (if types (class-names attrs) (microformat-class-names attrs))
+        names   (if types (backcompat/property-class-names types classes) classes)]
+    (boolean (or (microformat-classes? classes)
+                 (seq (property-classes names))))))
 
 ;; Images and text
 
@@ -140,8 +164,8 @@
 (defn value-elements
   "The value elements of the property element `node`: the descendants with
   the class name value or value-title, but not those inside another value
-  element, a property element or a microformat."
-  [node]
+  element, a property element or a microformat, by `env`."
+  [env node]
   (letfn [(value? [x]
             (let [s (str (:class (html/attrs x)))]
               (and (str/includes? s "value")
@@ -149,11 +173,11 @@
           (walk [acc node]
             (html/reduce-children (fn [acc x]
                                     (cond
-                                      (not (html/element? x))     acc
-                                      (= :template (html/tag x))  acc
-                                      (value? x)                  (conj acc x)
-                                      (microformat-element? x)    acc
-                                      :else                       (walk acc x)))
+                                      (not (html/element? x))      acc
+                                      (= :template (html/tag x))   acc
+                                      (value? x)                   (conj acc x)
+                                      (microformat-element? env x) acc
+                                      :else                        (walk acc x)))
                                   acc
                                   node))]
     (walk [] node)))
@@ -184,7 +208,7 @@
   "The value of the property element `node` by the value-class-pattern and
   `env`: its value elements concatenated, or nil when it has none."
   [env node]
-  (when-let [elements (seq (value-elements node))]
+  (when-let [elements (seq (value-elements env node))]
     (apply str (map #(value-text env value-attributes %) elements))))
 
 ;; Properties
@@ -246,7 +270,7 @@
   text, or a map of a :time and a :zone when it's a time without a date,
   which takes the date of another dt- property."
   [env node]
-  (if-let [parts (some->> (seq (value-elements node))
+  (if-let [parts (some->> (seq (value-elements env node))
                           (map #(value-text env datetime-value-attributes %))
                           (datetime/combined))]
     (cond-> parts (:date parts) datetime/text)
@@ -441,16 +465,15 @@
 (defn item
   "The microformat of the element `node`, of the root `types`, whose
   properties and children are in `frame`, with the properties it implies
-  by `env`."
+  by `env` unless it's a backcompat microformat."
   [env node types frame]
   (let [{:keys [properties prefixes dts children]} frame
         nested?    (or (seq children)
                        (some :type (filter map? (apply concat (vals properties)))))
-        properties (with-implied env
-                                 node
-                                 (with-dates properties dts)
-                                 prefixes
-                                 nested?)
+        dated      (with-dates properties dts)
+        properties (if (:backcompat env)
+                     dated
+                     (with-implied env node dated prefixes nested?))
         id         (not-empty (:id (html/attrs node)))]
     (cond-> {:type types :properties properties}
       id             (assoc :id id)
@@ -496,12 +519,18 @@
 
 ;; the spec leaves the case of rel values open, and HTML compares them
 ;; ASCII case-insensitively
+(defn- rel-values
+  "The rel values of the element with the attributes `attrs`, in lower
+  case and without duplicates."
+  [attrs]
+  (some-> (:rel attrs) str html/ascii-lower-case html/split-whitespace distinct))
+
 (defn add-rel
   "The `state` of the parse with the rels of the hyperlink element `node`,
   in lower case, and their URLs made absolute by `env`."
   [{:keys [absolute] :as env} state node]
   (let [attrs (html/attrs node)
-        rels  (some-> (:rel attrs) str html/ascii-lower-case html/split-whitespace distinct)]
+        rels  (rel-values attrs)]
     (if (or (empty? rels) (not (contains? attrs :href)))
       state
       (let [u    (absolute (:href attrs))
@@ -529,24 +558,62 @@
 
 (declare walk)
 
+(defn- add-rel-properties
+  "The `frame` of the backcompat microformat of `env` with the rels of the
+  hyperlink element `node` that are properties of it."
+  [env frame node]
+  (let [attrs (html/attrs node)]
+    (if (and (#{:a :area :link} (html/tag node)) (contains? attrs :href))
+      (reduce (fn [frame [rel s]]
+                (let [[prefix n] (property-class s)]
+                  (if-let [v (if (= "tag" rel)
+                               (backcompat/tag (:href attrs))
+                               (u-value env node))]
+                    (add-value frame prefix (keyword n) v)
+                    frame)))
+              frame
+              (backcompat/rel-properties (:backcompat env) (rel-values attrs)))
+      frame)))
+
+(defn- walk-item
+  "The `state` of the parse by `env` after the microformat element `node` of
+  the root `types` and the property classes `props`, which is a backcompat
+  microformat when `backcompat?`. Inside it, :backcompat in `env` is its
+  types, or nil."
+  [env state node types props backcompat?]
+  (let [frame (:frame state)
+        env   (assoc env :backcompat (when backcompat? types))
+        state (html/reduce-children #(walk env %1 %2)
+                                    (assoc state :frame (new-frame))
+                                    node)
+        child (:frame state)
+        item  (item env node types child)]
+    (assoc state :frame (add-item env frame node props item child))))
+
+;; inside a backcompat microformat, the class names that count are those of
+;; its backcompat properties, and a property can imply a root, e.g. the item
+;; of an hreview, which is an h-item
 (defn- walk-classes
   "The `state` of the parse by `env` after the element `node` of the class
   names `classes`, which can be a microformat or a property."
   [env state node classes]
-  (let [types (root-types classes)
-        frame (:frame state)
-        props (when-not (:top? frame) (property-classes classes))]
-    (if (seq types)
-      (let [state (html/reduce-children #(walk env %1 %2)
-                                        (assoc state :frame (new-frame))
-                                        node)
-            child (:frame state)
-            item  (item env node types child)]
-        (assoc state :frame (add-item env frame node props item child)))
-      (html/reduce-children #(walk env %1 %2)
-                            (cond-> state
-                              (seq props) (update :frame #(add-properties env % node props)))
-                            node))))
+  (let [frame   (:frame state)
+        context (:backcompat env)
+        names   (if context (backcompat/property-class-names context classes) classes)
+        props   (when-not (:top? frame) (property-classes names))
+        types   (root-types classes)
+        compat  (when (empty? types)
+                  (or (not-empty (backcompat/root-types classes))
+                      (when context (not-empty (root-types names)))))
+        state   (cond-> state
+                  context (update :frame #(add-rel-properties env % node)))]
+    (cond
+      (seq types) (walk-item env state node types props false)
+      compat      (walk-item env state node compat props true)
+      :else       (html/reduce-children #(walk env %1 %2)
+                                        (cond-> state
+                                          (seq props) (update :frame #(add-properties env % node props)))
+                                        node))))
 
 (defn walk
   "The `state` of the parse by `env` after the Hiccup `node`, which isn't
@@ -557,10 +624,13 @@
     (let [tag (html/tag node)]
       (if (= :template tag)
         state
-        (let [state (if (#{:a :area :link} tag) (add-rel env state node) state)]
-          (if-let [classes (microformat-class-names (html/attrs node))]
-            (walk-classes env state node classes)
-            (html/reduce-children #(walk env %1 %2) state node)))))))
+        (let [state (if (#{:a :area :link} tag) (add-rel env state node) state)
+              attrs (html/attrs node)]
+          (if (:backcompat env)
+            (walk-classes env state node (class-names attrs))
+            (if-let [classes (microformat-class-names attrs)]
+              (walk-classes env state node classes)
+              (html/reduce-children #(walk env %1 %2) state node))))))))
 
 (defn base-href
   "The href of the first base element of the Hiccup `nodes` that has one,

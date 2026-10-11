@@ -25,7 +25,8 @@
   once for several uses. Relative URLs are resolved against `url` and the
   first base element, and they stay relative when `url` is nil and there
   is no base. An e- property has its content as :hiccup too, next to the
-  :html and the :value of the spec.
+  :html and the :value of the spec. The classes of microformats1, e.g.
+  vcard, are read as the spec's backcompat microformats, e.g. h-card.
 
   A text value is the text content of its element, as the spec has it, but
   with a line break at each br, and where a block element would otherwise
