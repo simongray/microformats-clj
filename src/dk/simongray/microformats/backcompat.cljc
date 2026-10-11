@@ -205,6 +205,30 @@
        (remove empty?)
        (last)))
 
+;; https://microformats.org/wiki/h-entry#Parser_Compatibility proposes these
+;; for the default themes of WordPress, which mark up neither published nor
+;; author, but haven't accepted them
+(defn proposed-properties
+  "The properties that the element `node` gives the hentry it's in by the
+  rules that the microformats wiki proposes, as a map of property to
+  value: the datetime of a time of the class entry-date as published, and
+  the URL of a rel=author hyperlink, made absolute by `absolute`, as
+  author."
+  [absolute node]
+  (let [tag   (html/tag node)
+        attrs (html/attrs node)
+        words #(some-> % str html/split-whitespace set)]
+    (cond-> {}
+      (and (= :time tag)
+           (contains? (words (:class attrs)) "entry-date")
+           (not-empty (:datetime attrs)))
+      (assoc :published (:datetime attrs))
+
+      (and (#{:a :area :link} tag)
+           (contains? attrs :href)
+           (contains? (words (some-> (:rel attrs) str html/ascii-lower-case)) "author"))
+      (assoc :author (absolute (:href attrs))))))
+
 ;; The include pattern: https://microformats.org/wiki/include-pattern
 
 (defn ids

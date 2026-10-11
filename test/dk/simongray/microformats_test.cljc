@@ -116,6 +116,24 @@
            :id         "post-1"}]
          (:items (mf/parse wordpress-post url)))))
 
+(def wordpress-theme-post
+  (str "<article class=\"hentry\">"
+       "<a href=\"/hello/\" rel=\"bookmark\"><time class=\"entry-date\" datetime=\"2014-01-01T00:00:00+00:00\">1 January</time></a>"
+       "<a href=\"/author/jane/\" rel=\"author\">Jane</a>"
+       "</article>"))
+
+(deftest proposed-backcompat
+  (let [properties #(get-in (mf/parse %1 url %2) [:items 0 :properties])]
+    (is (= {:url ["https://jane.example/hello/"]}
+           (properties wordpress-theme-post {})))
+    (is (= {:url       ["https://jane.example/hello/"]
+            :published ["2014-01-01T00:00:00+00:00"]
+            :author    ["https://jane.example/author/jane/"]}
+           (properties wordpress-theme-post {:proposed-backcompat? true})))
+    (is (= ["2026-10-10"]
+           (:published (properties "<p class=\"hentry\"><time class=\"published\">2026-10-10</time><time class=\"entry-date\" datetime=\"2014-01-01\"></time></p>"
+                                   {:proposed-backcompat? true}))))))
+
 (deftest the-include-pattern
   (let [names #(map (comp :name :properties) (:items (mf/parse % url)))]
     (is (= [["Jane"]]

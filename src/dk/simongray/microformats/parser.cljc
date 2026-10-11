@@ -14,6 +14,8 @@
     their text, e.g. html/text
   - :backcompat, the types of the backcompat microformat that a node is
     in, or nil
+  - :proposed-backcompat?, whether an hentry also takes the properties
+    that the microformats wiki proposes for it
   - :ids, a delay of the elements of the page by id, for the include
     pattern of backcompat microformats
   - :excluded, the ids that the backcompat microformats around a node
@@ -474,14 +476,14 @@
 (defn item
   "The microformat of the element `node`, of the root `types`, whose
   properties and children are in `frame`, with the properties it implies
-  by `env` unless it's a backcompat microformat."
+  by `env`, or those proposed for it if it's a backcompat microformat."
   [env node types frame]
-  (let [{:keys [properties prefixes dts children]} frame
+  (let [{:keys [properties prefixes dts children proposed]} frame
         nested?    (or (seq children)
                        (some :type (filter map? (apply concat (vals properties)))))
         dated      (with-dates properties dts)
         properties (if (:backcompat env)
-                     dated
+                     (merge proposed dated)
                      (with-implied env node dated prefixes nested?))
         id         (not-empty (:id (html/attrs node)))]
     (cond-> {:type types :properties properties}
@@ -584,6 +586,16 @@
               (backcompat/rel-properties (:backcompat env) (rel-values attrs)))
       frame)))
 
+(defn- add-proposed
+  "The `frame` of an hentry with the properties that the element `node`
+  gives it by the rules that the microformats wiki proposes, the first of
+  each, made absolute by `env`."
+  [env frame node]
+  (reduce-kv (fn [frame k v]
+               (update-in frame [:proposed k] #(or % [v])))
+             frame
+             (backcompat/proposed-properties (:absolute env) node)))
+
 ;; the ids that a root refers to are excluded inside it, so that includes
 ;; that refer to each other end
 (defn- with-includes
@@ -628,7 +640,11 @@
                   (or (not-empty (backcompat/root-types classes))
                       (when context (not-empty (root-types names)))))
         state   (cond-> state
-                  context (update :frame #(add-rel-properties env % node)))]
+                  context
+                  (update :frame #(add-rel-properties env % node))
+
+                  (and (:proposed-backcompat? env) (some #{"h-entry"} context))
+                  (update :frame #(add-proposed env % node)))]
     (cond
       (seq types) (walk-item env state node types props false)
       compat      (walk-item env state node compat props true)

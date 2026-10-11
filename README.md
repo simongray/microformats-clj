@@ -139,6 +139,14 @@ microformat implies no name, photo or url. It can take properties from
 elsewhere on the page by the
 [include pattern](https://microformats.org/wiki/include-pattern).
 
+The [h-entry](https://microformats.org/wiki/h-entry#Parser_Compatibility)
+page also proposes two rules that haven't been accepted: an hentry
+without a published date takes the `datetime` of its first
+`<time class="entry-date">`, as in the default WordPress themes from
+2011 to 2014, and one without an author takes the URL of its first
+`rel="author"` link. To apply them, pass `{:proposed-backcompat? true}`
+as the options of `mf/parse`.
+
 The [authorship](https://indieweb.org/authorship-spec) of an h-entry and
 the [representative h-card](https://microformats.org/wiki/representative-h-card-parsing)
 of a page have specs of their own, which this library leaves out.

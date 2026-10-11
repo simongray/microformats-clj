@@ -35,6 +35,11 @@
   is collapsed instead, as php-mf2 and mf2py do it, by the draft of
   https://microformats.org/wiki/textcontent-parsing
 
+  With :proposed-backcompat? in `opts`, an hentry without a published date
+  or an author takes them from the first time of the class entry-date and
+  the first rel=author hyperlink in it, as the h-entry page of the
+  microformats wiki proposes for the default themes of WordPress.
+
       (parse \"<a class=h-card href=/jane>Jane</a>\" \"https://example.com/\")
       ;; => {:items    [{:type       [\"h-card\"]
       ;;                 :properties {:name [\"Jane\"]
@@ -50,12 +55,13 @@
                     url)
          resolver (url/resolver base)
          ;; a URL that isn't valid stays as it's written
-         env      {:absolute #(or (resolver %) %)
-                   :text     (if (:collapse-whitespace? opts)
-                               html/collapsed-text
-                               html/text)
-                   :ids      (delay (backcompat/ids nodes))
-                   :excluded #{}}
+         env      {:absolute             #(or (resolver %) %)
+                   :text                 (if (:collapse-whitespace? opts)
+                                           html/collapsed-text
+                                           html/text)
+                   :ids                  (delay (backcompat/ids nodes))
+                   :excluded             #{}
+                   :proposed-backcompat? (:proposed-backcompat? opts)}
          state    (reduce #(parser/walk env %1 %2) parser/initial-state nodes)]
      {:items    (get-in state [:frame :children])
       :rels     (:rels state)
