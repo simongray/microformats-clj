@@ -7,10 +7,10 @@
   in document order, the values of their properties, the representative
   h-card of a page, and the author of an h-entry."
   (:require [dk.simongray.html-pieces :as html-pieces]
-            [dk.simongray.html-pieces.url :as url]
             [dk.simongray.microformats.backcompat :as backcompat]
             [dk.simongray.microformats.html :as html]
-            [dk.simongray.microformats.parser :as parser]))
+            [dk.simongray.microformats.parser :as parser]
+            [dk.simongray.whatwg-url :as url]))
 
 (defn- nodes-of
   "The Hiccup nodes of `x`: the HTML string `x` parsed, an element, or

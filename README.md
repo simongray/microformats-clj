@@ -32,7 +32,7 @@ It requires Clojure 1.11+ and Java 11+. Add it from
 `:deps` in your `deps.edn`:
 
 ```clojure
-dk.simongray/microformats-clj {:mvn/version "0.2.0"}
+dk.simongray/microformats-clj {:mvn/version "0.3.0"}
 ```
 
 Then parse a page, with the URL to resolve its relative URLs against:
@@ -110,10 +110,11 @@ An e- property has its content as `:hiccup`, next to the `:html` and the
 
 URLs are resolved against the page URL and the first `<base>`, and
 normalized as a browser normalizes them, by the
-[URL Standard](https://url.spec.whatwg.org/). So an empty `href`, e.g. of
-a Webmention endpoint, gives the URL of the page itself, or of its
-`<base>` when it has one. When the URL of the page is nil and there's no
-`<base>`, relative URLs stay as they are.
+[URL Standard](https://url.spec.whatwg.org/), which
+[whatwg-url](https://github.com/simongray/whatwg-url) implements. So an
+empty `href`, e.g. of a Webmention endpoint, gives the URL of the page
+itself, or of its `<base>` when it has one. When the URL of the page is
+nil and there's no `<base>`, relative URLs stay as they are.
 
 A text value, e.g. of a p- property or the `:value` of an e- property, is
 the text content of its element, as the spec has it, but with a line
@@ -201,8 +202,9 @@ Principles
 - **One walk.** The class and rel microformats are parsed in one walk of
   the tree, as the spec allows, except on a page that uses the include
   pattern of microformats1.
-- **One codebase.** The library is written in `.cljc`. Its only
-  dependency is html-pieces.
+- **One codebase.** The library is written in `.cljc`. Its dependencies
+  are html-pieces, which reads the HTML, and whatwg-url, which resolves
+  the URLs.
 
 Performance
 -----------
