@@ -1,14 +1,15 @@
 (ns dk.simongray.microformats.bench
-  "The time that the parser takes on a few large real pages, next to the
-  time that html-pieces/parse alone takes on them, on the JVM and in Node.
+  "Benchmarks of the parser on a few large real pages, compared with
+  html-pieces/parse alone, on the JVM and in Node.
 
       clojure -X:bench                                       ; the JVM
       clojure -M:cljs release bench && node target/bench.js  ; Node
 
-  The JVM fetches the pages into bench/fixtures, which Git ignores, the
-  first time it runs, and Node reads them from there. Each round times
-  every measure once, in turn, so that a change in the load of the machine
-  affects them alike, and the median of the rounds is reported."
+  The first time the JVM benchmarks run, they download the pages into
+  bench/fixtures, which Git ignores. The Node benchmarks read them from
+  there. Each round times every measurement once, in turn, so that changes
+  in the machine's load affect them all alike. The result is the median
+  of the rounds."
   (:require #?(:clj [clojure.java.io :as io])
             #?(:cljs ["fs" :as fs])
             #?(:cljs [goog.string :as gstring])
@@ -17,7 +18,7 @@
             [dk.simongray.microformats :as mf]))
 
 (def fixtures
-  "The pages, each at a URL that gives the same page each time."
+  "The pages, each at a URL that always returns the same page."
   [{:name "indieweb-chat-2015-07-12"
     :url  "https://chat.indieweb.org/2015-07-12"
     :what "IndieWeb chat log, an h-entry with an h-card per message"}
@@ -75,8 +76,8 @@
   (nth (sort xs) (quot (count xs) 2)))
 
 (defn measure
-  "The median milliseconds of each function of `fs`, a map of name to
-  function, over `rounds` rounds after `warmup` rounds."
+  "The median milliseconds that each function in `fs`, a map of name to
+  function, takes over `rounds` rounds, after `warmup` rounds of warm-up."
   [fs warmup rounds]
   (dotimes [_ warmup]
     (run! (fn [[_ f]] (f)) fs))
@@ -90,11 +91,11 @@
        :cljs (apply gstring/format pattern args))))
 
 (defn run
-  "Print the time of html-pieces/parse, of mf/parse on its tree, and of
-  mf/parse on the HTML, for each fixture, by these keys of `opts`:
+  "Print the time that html-pieces/parse, mf/parse on its tree and
+  mf/parse on the HTML take for each fixture, with these keys of `opts`:
 
-  - :warmup, the rounds before the timing, 10 by default
-  - :rounds, the rounds that are timed, 21 by default"
+  - :warmup, the number of untimed rounds first, 10 by default
+  - :rounds, the number of timed rounds, 21 by default"
   [{:keys [warmup rounds] :or {warmup 10 rounds 21}}]
   #?(:clj (fetch! fixtures))
   (println "| Page                         |       Size |       Parse | Microformats | Share |        Both |")

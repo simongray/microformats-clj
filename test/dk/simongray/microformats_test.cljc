@@ -53,8 +53,8 @@
          (mf/parse [[:p {:class "h-card"} "Jane"]] nil))))
 
 (defn- text-values
-  "The name and the text of the content of the first item that the HTML `s`
-  parses to, by `opts`."
+  "The name and content text of the first item in the HTML `s`, parsed
+  with `opts`."
   [s opts]
   (let [{:keys [name content]} (get-in (mf/parse s url opts) [:items 0 :properties])]
     [(first name) (:value (first content))]))
@@ -97,7 +97,7 @@
   (is (= (select-keys (mf/parse post url) [:rels :rel-urls])
          (mf/rels post url)
          (mf/rels (html-pieces/parse post) url))
-      "as parse gives them, from HTML or Hiccup"))
+      "the same as parse returns, from HTML or Hiccup"))
 
 (deftest reading-the-items
   (let [mf2     (mf/parse (str "<div class=\"h-entry\"><div class=\"h-card\">Ann</div>"
@@ -108,15 +108,15 @@
                           url)
         [entry] (:items mf2)]
     (is (= [["h-entry"] ["h-card"] ["h-card"] ["h-cite"]] (map :type (mf/items mf2)))
-        "every microformat in document order, though a child is apart from the properties")
+        "every microformat in document order, though children are kept apart from properties")
     (is (= ["Ann" "Bo"] (map #(mf/property % :name) (mf/items mf2 "h-card")))
-        "of a type, and once though it's the value of two properties")
+        "only those of a type, each once, even when it's the value of two properties")
     (is (= "Bo" (mf/property entry :author)) "the value of an embedded microformat")
     (is (= "https://jane.example/a.jpg" (mf/property entry :photo)) "of an image with alt text")
     (is (= ["https://example.org/post"] (mf/urls entry :in-reply-to)) "the url of an h-cite")
     (is (= ["https://example.org/post"] (mf/urls {:properties {:in-reply-to ["HTTPS://Example.org:443/post" "a post"]}}
                                                  :in-reply-to))
-        "the absolute URLs alone, made normal")))
+        "only the absolute URLs, normalized")))
 
 (deftest the-representative-card
   (let [card #(mf/representative-card (mf/parse % url) url)]
@@ -131,7 +131,7 @@
                               "<a class=\"p-name u-url\" href=\"https://jane.example/\">Jane</a></p></div>"
                               "<a rel=\"me\" href=\"https://jane.example/\">me</a>"))
                    [:properties :name]))
-        "or else the first whose url is a rel=me of the page, nested too")
+        "or else the first whose url is a rel=me link of the page, even a nested one")
     (is (= ["Jane"]
            (get-in (card "<p class=\"h-card\"><a class=\"p-name u-url\" href=\"\">Jane</a></p>")
                    [:properties :name]))
@@ -174,7 +174,7 @@
                    [:properties :name]))
         "the h-card on the author's page")
     (is (= ["Jane here"] (get-in (mf/author-card mf2 page nil) [:properties :name]))
-        "or else the h-card on the entry's page with the url of the author's page")))
+        "or else the h-card on the entry's page whose url is the author's page")))
 
 (def wordpress-post
   (str "<article id=\"post-1\" class=\"post-1 post hentry\">"

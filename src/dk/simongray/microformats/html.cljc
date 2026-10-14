@@ -1,10 +1,10 @@
 (ns ^:no-doc dk.simongray.microformats.html
-  "Hiccup read as the DOM reads HTML: the parts of an element and its text
-  content, and the ASCII whitespace and letters that HTML compares.
+  "The parts of a Hiccup element, its text content as in the DOM, and the
+  ASCII whitespace and case rules of HTML.
 
-  The Hiccup is that of html-pieces: an element is a vector of a keyword
-  tag, an optional map of attributes and the children, and text is a
-  string."
+  The Hiccup is in the form that html-pieces returns: an element is a
+  vector of a keyword tag, an optional attribute map and the children,
+  and text is a string."
   (:require [clojure.string :as str]
             [dk.simongray.html-pieces :as html-pieces])
   #?(:cljs (:import [goog.string StringBuffer])))
@@ -30,10 +30,10 @@
   [node]
   (subvec node (if (map? (nth node 1 nil)) 2 1)))
 
-;; reduce takes a subvec by an iterator, which is slower than nth
+;; reduce walks a subvec with an iterator, which is slower than nth
 (defn reduce-children
-  "The children of the element `node` reduced by `f` from `init`, as
-  reduce does."
+  "The result of reducing the children of the element `node` with `f`,
+  starting from `init`."
   [f init node]
   (let [n (count node)]
     (loop [i   (if (map? (nth node 1 nil)) 2 1)
@@ -50,11 +50,11 @@
   [node]
   (filterv element? (children node)))
 
-;; The code of a character and the tests of it take and give primitives on
-;; the JVM, so that the loops over text don't box each character.
+;; On the JVM, the character functions below take and return primitives, so
+;; that the loops over text don't box each character.
 
 (defn code-at
-  "The code of the character at `i` of the text `s`."
+  "The code of the character at index `i` in the text `s`."
   ^long [s ^long i]
   #?(:clj  (long (int (.charAt ^String s (int i))))
      :cljs (.charCodeAt s i)))
@@ -86,16 +86,17 @@
   [s]
   (strip-start (strip-end s)))
 
-;; Infra Standard, "ASCII lowercase", as HTML compares e.g. rel values
+;; Infra Standard, "ASCII lowercase", which HTML uses to compare e.g. rel
+;; values
 (defn ascii-lower-case
   "The text `s` with the ASCII letters A to Z in lower case."
   [s]
   (str/replace s #"[A-Z]+" #?(:clj  #(.toLowerCase ^String % java.util.Locale/ROOT)
                               :cljs #(.toLowerCase %))))
 
-;; JavaScript splits a string fastest itself
+;; in JavaScript, the native split is fastest
 (defn split-whitespace
-  "The words of the text `s` that ASCII whitespace separates."
+  "The words of the text `s`, split on ASCII whitespace."
   [^String s]
   #?(:clj  (let [n (count s)]
              (loop [i 0 start 0 words (transient [])]
@@ -121,27 +122,26 @@
      :cljs (.append b s)))
 
 (def ignored-tags
-  "The elements whose content is no text: script and style, and template,
-  whose content is outside the document."
+  "The elements whose content doesn't count as text: script, style and
+  template, whose content is outside the document."
   #{:script :style :template})
 
 (def block-tags
-  "The elements that start and end a line of text, which html-pieces sets
-  off in its text."
+  "The elements that start and end a line of text, as they do in
+  html-pieces/text."
   (into html-pieces/paragraph-tags html-pieces/line-tags))
 
-;; the textContent of the DOM runs words together where the HTML has no
+;; the DOM's textContent runs words together where the HTML has no
 ;; whitespace between blocks, e.g. <p>One.</p><p>Two</p>
 ;;
-;; TODO: this default may change in a 0.2. It differs a little from the
-;; textContent that the spec names, though the suite still passes, and
-;; issue 15 of microformats2-parsing, open since 2018, may settle it.
+;; TODO: this default may change in a later version. It differs a little
+;; from the textContent that the spec names, though the suite still passes.
+;; Issue 15 of microformats2-parsing, open since 2018, may settle it.
 (defn text
-  "The text content of the Hiccup `nodes`, without the content of the
-  ignored-tags, and with each img as the text that `img-text` gives of its
-  attributes, if any. A br is a line break, and so are the start and the
-  end of an element of block-tags, where there's no whitespace on either
-  side of them."
+  "The text content of the Hiccup `nodes`, leaving out the ignored-tags
+  and replacing each img with what `img-text` returns for its attributes,
+  if anything. A br becomes a line break, and so do the start and end of
+  an element of block-tags, unless there's whitespace on either side."
   [nodes img-text]
   (let [b        (builder)
         space?   (volatile! true)
@@ -174,12 +174,12 @@
       (str b))))
 
 ;; https://microformats.org/wiki/textcontent-parsing, a draft that php-mf2
-;; and mf2py follow, but which the microformats/tests suite doesn't
+;; and mf2py follow, but the microformats/tests suite doesn't
 (defn collapsed-text
   "The text content of the Hiccup `nodes` with its whitespace collapsed,
-  without the content of the ignored-tags, and with each img as the text
-  that `img-text` gives of its attributes, if any, between spaces. A br is
-  a line break, and so is the start of a p."
+  leaving out the ignored-tags and replacing each img with what `img-text`
+  returns for its attributes, if anything, between spaces. A br or the
+  start of a p becomes a line break."
   [nodes img-text]
   (let [b (builder)]
     (letfn [(node [_ x]
@@ -202,8 +202,8 @@
                    ""))))
 
 (defn update-attrs
-  "The Hiccup `nodes` with the attributes of each element changed by `f`,
-  a function of the tag and the attributes."
+  "The Hiccup `nodes` with the attributes of each element replaced by what
+  `f` returns for its tag and attributes."
   [nodes f]
   (letfn [(node [x]
             (if (element? x)
@@ -212,8 +212,8 @@
     (map node nodes)))
 
 (defn trimmed
-  "The Hiccup `nodes` without the ASCII whitespace at their ends, which is
-  in the text of the first node and of the last, if they're text."
+  "The Hiccup `nodes` with ASCII whitespace stripped from the start of the
+  first node and the end of the last, when they're text."
   [nodes]
   (let [v (vec nodes)
         v (cond-> v (string? (first v)) (update 0 strip-start))

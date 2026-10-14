@@ -1,31 +1,31 @@
 (ns ^:no-doc dk.simongray.microformats.parser
-  "The elements of a Hiccup tree parsed for class and rel microformats, by
-  the microformats2 parsing specification, which the docstrings cite by
-  section: https://microformats.org/wiki/microformats2-parsing
+  "A parser of class and rel microformats in a Hiccup tree, following the
+  microformats2 parsing specification, whose sections the docstrings cite:
+  https://microformats.org/wiki/microformats2-parsing
 
-  The class and rel microformats are parsed in one walk of the tree, which
-  the spec allows. The value-class-pattern is that of
+  The parser finds class and rel microformats in a single walk of the
+  tree, as the spec allows. The value-class-pattern is the one at
   https://microformats.org/wiki/value-class-pattern
 
-  TODO: deeply nested microformats are slow to parse. 4 MB of 100,000
-  nested h-entries takes about 2.3 s on the JVM, ten times what
-  html-pieces/parse takes to read the page. The time grows in proportion
-  to the input, and a normal page adds 20-50% to the time of reading it,
-  as doc/benchmarks.md shows.
+  TODO: deeply nested microformats are slow to parse. Parsing 4 MB of
+  100,000 nested h-entries takes about 2.3 s on the JVM, ten times as long
+  as html-pieces/parse takes to parse the page. The time grows in
+  proportion to the input. On a normal page, the parser adds 20-50% to the
+  time that html-pieces takes, as doc/benchmarks.md shows.
 
-  The functions of the parse take its `env`, a map of:
+  The parsing functions take an `env`, a map of:
 
   - :absolute, a function that makes a URL absolute
-  - :text, a function of Hiccup nodes and of the text of an img that gives
-    their text, e.g. html/text
-  - :backcompat, the types of the backcompat microformat that a node is
-    in, or nil
-  - :proposed-backcompat?, whether an hentry also takes the properties
-    that the microformats wiki proposes for it
-  - :ids, a delay of the elements of the page by id, for the include
+  - :text, a function that returns the text of Hiccup nodes, given a
+    function that returns the text of an img, e.g. html/text
+  - :backcompat, the types of the backcompat microformat around a node,
+    or nil
+  - :proposed-backcompat?, whether an hentry also gets the properties
+    that the microformats wiki proposes
+  - :ids, a delay of a map of id to element for the page, for the include
     pattern of backcompat microformats
   - :excluded, the ids that the backcompat microformats around a node
-    refer to, which it can't include again"
+    refer to, which the node can't include again"
   (:require [clojure.string :as str]
             [dk.simongray.html-pieces :as html-pieces]
             [dk.simongray.microformats.backcompat :as backcompat]
@@ -34,11 +34,12 @@
 
 ;; Class names
 
-;; a loop rather than the regular expression (?:[0-9a-z]+-)?[a-z]+(?:-[a-z]+)*
-;; of the spec, since every class name of a microformat is checked
+;; a loop rather than the spec's regular expression
+;; (?:[0-9a-z]+-)?[a-z]+(?:-[a-z]+)*, since every class name of a
+;; microformat is checked
 (defn class-name?
-  "Whether the text `s` is the name of a root class or a property class
-  after its prefix: an optional vendor prefix of a to z and digits, then
+  "Whether the text `s` is a valid root or property class name after the
+  prefix: an optional vendor prefix of letters a to z and digits, then
   words of a to z, all separated by hyphens."
   [s]
   (let [n (count s)]
@@ -60,8 +61,8 @@
   (when-let [s (:class attrs)]
     (html/split-whitespace (str s))))
 
-;; most elements of a page have a class, and few have a microformat class,
-;; which a search of the text of the attribute tells fastest
+;; most elements on a page have a class, but few have a microformat class,
+;; and searching the attribute's text is the fastest way to tell
 (defn microformat-class-names
   "The class names of the element with the attributes `attrs`, when one of
   them can be a root, a property or a backcompat root class name, or else
@@ -92,8 +93,8 @@
        (class-name? (subs s 2))))
 
 (defn root-types
-  "The root class names among the class names `classes`, sorted and
-  without duplicates, e.g. [\"h-card\"]."
+  "The root class names in `classes`, sorted and without duplicates, e.g.
+  [\"h-card\"]."
   [classes]
   (let [types (filterv root-class? classes)]
     (cond-> types
@@ -111,11 +112,12 @@
       (when (class-name? n)
         [prefix n]))))
 
-;; a class name given twice is a property twice, as the tentative tests of
-;; microformats/tests have it, after microformats2-parsing issue 61
+;; a class name given twice makes the property appear twice, as the
+;; tentative tests of microformats/tests expect, after microformats2-parsing
+;; issue 61
 (defn property-classes
-  "The property class names among the class names `classes`, in order, each
-  as a pair of its prefix and its name, e.g. [\"p\" \"name\"]."
+  "The property class names in `classes`, in order, each as a pair of
+  prefix and name, e.g. [\"p\" \"name\"]."
   [classes]
   (into [] (keep property-class) classes))
 
@@ -125,8 +127,7 @@
   (boolean (seq (root-types (microformat-class-names (html/attrs node))))))
 
 (defn- microformat-classes?
-  "Whether the class names `classes` have a root or a backcompat root class
-  name."
+  "Whether `classes` contain a root or backcompat root class name."
   [classes]
   (boolean (or (seq (root-types classes))
                (seq (backcompat/root-types classes)))))
@@ -137,8 +138,8 @@
   (microformat-classes? (microformat-class-names (html/attrs node))))
 
 (defn- microformat-element?
-  "Whether the element `node` is a microformat or a property, inside the
-  backcompat microformat of `env`, if any."
+  "Whether the element `node` is a microformat or a property, within the
+  backcompat microformat in `env`, if any."
   [env node]
   (let [attrs   (html/attrs node)
         types   (:backcompat env)
@@ -169,8 +170,8 @@
     (contains? attrs :src) (str " " (absolute (:src attrs)) " ")))
 
 (defn text
-  "The text of the element `node`, by `env`, stripped, with each img as the
-  text that `img-text` gives of its attributes, if any."
+  "The stripped text of the element `node`, by `env`, replacing each img
+  with what `img-text` returns for its attributes, if anything."
   ([env node]
    (text env node (constantly nil)))
   ([env node img-text]
@@ -179,9 +180,9 @@
 ;; Value class pattern
 
 (defn value-elements
-  "The value elements of the property element `node`: the descendants with
-  the class name value or value-title, but not those inside another value
-  element, a property element or a microformat, by `env`."
+  "The value elements of the property element `node`, by `env`: the
+  descendants with the class value or value-title, except those inside
+  another value element, a property element or a microformat."
   [env node]
   (letfn [(value? [x]
             (let [s (str (:class (html/attrs x)))]
@@ -200,8 +201,8 @@
     (walk [] node)))
 
 (defn value-text
-  "The text of the value element `node`, by `env`, with the elements that
-  hold it in an attribute of `attributes`, a map of tag to attribute."
+  "The text of the value element `node`, by `env`, or the value of its
+  attribute in `attributes`, a map of tag to attribute."
   [env attributes node]
   (let [attrs (html/attrs node)
         k     (get attributes (html/tag node))]
@@ -213,17 +214,18 @@
                                                                 (constantly nil)))))
 
 (def value-attributes
-  "The attribute that holds the value of a value element, by tag."
+  "The attribute that holds the value of a value element, for each tag."
   {:img :alt :area :alt :data :value :abbr :title})
 
 (def datetime-value-attributes
   "The attribute that holds the value of a value element of a dt- property,
-  by tag."
+  for each tag."
   (assoc value-attributes :del :datetime :ins :datetime :time :datetime))
 
 (defn value-class-text
   "The value of the property element `node` by the value-class-pattern and
-  `env`: its value elements concatenated, or nil when it has none."
+  `env`: the text of its value elements concatenated, or nil when it has
+  none."
   [env node]
   (when-let [elements (seq (value-elements env node))]
     (apply str (map #(value-text env value-attributes %) elements))))
@@ -284,8 +286,8 @@
 
 (defn dt-value
   "The value of the dt- property element `node`, by 1.3.3 and `env`: a
-  text, or a map of a :time and a :zone when it's a time without a date,
-  which takes the date of another dt- property."
+  string, or a map of :time and :zone when it's a time without a date,
+  which then takes the date of another dt- property."
   [env node]
   (if-let [parts (some->> (seq (value-elements env node))
                           (map #(value-text env datetime-value-attributes %))
@@ -294,11 +296,11 @@
     (let [s (dt-text env node)]
       (or (datetime/time-only (html/strip s)) s))))
 
-;; microformats2-parsing issue 38, which the tests of microformats/tests
-;; follow
+;; microformats2-parsing issue 38, which the microformats/tests suite
+;; follows
 (defn absolute-urls
-  "The attributes `attrs` with their URLs made absolute by `env`, but those
-  that are a fragment alone, e.g. #top."
+  "The attributes `attrs` with their URLs made absolute by `env`, except
+  those that are only a fragment, e.g. #top."
   [{:keys [absolute] :as env} attrs]
   (reduce-kv (fn [m k v]
                (if (and (html-pieces/url-attributes k)
@@ -311,8 +313,8 @@
 
 (defn e-value
   "The value of the e- property element `node`, by 1.3.4 and `env`: a map
-  of its :html and its text :value, and its content as :hiccup, with
-  absolute URLs in each."
+  of its :html, its text as :value and its content as :hiccup, all with
+  absolute URLs."
   [env node]
   (let [nodes (-> (html/children node)
                   (html/update-attrs (fn [_ attrs] (absolute-urls env attrs)))
@@ -322,7 +324,8 @@
      :hiccup (apply list nodes)}))
 
 (defn property-value
-  "The value of the property element `node` of the `prefix`, by `env`."
+  "The value of the property element `node` for the `prefix`, e.g. p, by
+  `env`."
   [env prefix node]
   (case prefix
     "p"  (p-value env node)
@@ -333,24 +336,24 @@
 ;; Implied properties, 1.3.5
 
 (defn- only-child
-  "The only element child of the element `node`, when it has one and it's
-  no microformat."
+  "The only child element of `node`, when it has exactly one and it isn't
+  a microformat."
   [node]
   (let [[x more] (html/element-children node)]
     (when (and x (not more) (not (root? x)))
       x)))
 
 (defn- only-of-type
-  "The only element child of the `tag` of the element `node`, when it has
-  one and it's no microformat."
+  "The only child element of `node` with the `tag`, when there's exactly
+  one and it isn't a microformat."
   [node tag]
   (let [[x more] (filter #(= tag (html/tag %)) (html/element-children node))]
     (when (and x (not more) (not (root? x)))
       x)))
 
 (defn- non-empty-name
-  "The alt of an img or an area, or the title of an abbr, the element
-  `node`, when it isn't empty."
+  "The alt of `node` when it's an img or area, or its title when it's an
+  abbr, unless that's empty."
   [node]
   (let [k (case (html/tag node)
             (:img :area) :alt
@@ -370,9 +373,9 @@
                     (text env node :alt)))))
 
 (defn- implied
-  "The value that `value-of` gives of the microformat element `node`, or
-  else of its only child of one of the `tags`, or else of such a child of
-  its only child."
+  "What `value-of` returns for the microformat element `node`, or else for
+  its only child with one of the `tags`, or else for such a child of its
+  only child."
   [value-of tags node]
   (letfn [(of-child [parent]
             (some #(some-> (only-of-type parent %) value-of) tags))]
@@ -411,7 +414,7 @@
 
 (defn with-implied
   "The `properties` of the microformat element `node` with the name, photo
-  and url that it implies by `env`, by the `prefixes` of its properties and
+  and url it implies by `env`, given the `prefixes` of its properties and
   whether it has `nested?` microformats."
   [env node properties prefixes nested?]
   (let [imply? (fn [k blocking]
@@ -427,9 +430,9 @@
 
 ;; The value-class-pattern, "microformats2 parsers implied date"
 (defn with-dates
-  "The `properties` with each time that lacks a date given the date of the
-  dt- property before it, or else after it. The `dts` are the paths to the
-  dt- values, in document order."
+  "The `properties`, where each time without a date takes the date of the
+  dt- property before it, or else the one after it. The `dts` are the
+  paths to the dt- values, in document order."
   [properties dts]
   (if-not (some #(map? (get-in properties %)) dts)
     properties
@@ -447,8 +450,8 @@
 ;; Parsing a document, 1.1 and 1.2
 
 (defn- new-frame
-  "The state of the parse of a microformat whose properties are found, with
-  the first value of a p-name as :p-name and of a u-url as :u-url."
+  "The initial parse state of a microformat. It later holds the first
+  p-name value as :p-name and the first u-url value as :u-url."
   []
   {:properties {}
    :prefixes   #{}
@@ -456,8 +459,8 @@
    :children   []})
 
 (defn- add-value
-  "The microformat `frame` with the value `v` added to its property `k` of
-  the `prefix`."
+  "The microformat `frame` with the value `v` added to its property `k`,
+  which has the `prefix`."
   [frame prefix k v]
   (let [field (cond
                 (and (= :name k) (= "p" prefix)) :p-name
@@ -468,8 +471,9 @@
       (and field (not (contains? frame field))) (assoc field v))))
 
 (defn- add-properties
-  "The microformat `frame` with the properties of the classes `props` of
-  the element `node`, parsed by `env`, and the path to each dt- value."
+  "The microformat `frame` with the values of the element `node` added for
+  its property classes `props`, parsed by `env`, along with the path to
+  each dt- value."
   [env frame node props]
   (reduce (fn [frame [prefix n]]
             (let [k    (keyword n)
@@ -480,9 +484,9 @@
           props))
 
 (defn item
-  "The microformat of the element `node`, of the root `types`, whose
-  properties and children are in `frame`, with the properties it implies
-  by `env`, or those proposed for it if it's a backcompat microformat."
+  "The microformat of the element `node` with the root `types` and the
+  properties and children in `frame`, plus the properties it implies by
+  `env`, or the proposed ones for a backcompat microformat."
   [env node types frame]
   (let [{:keys [properties prefixes dts children proposed]} frame
         nested?    (or (seq children)
@@ -497,7 +501,7 @@
       (seq children) (assoc :children children))))
 
 (defn- first-value
-  "The first value of the property `k` of the `item` that the `frame` of
+  "The first value of the property `k` of the `item`, which the `frame` of
   its parse holds as `field`, e.g. :p-name, or else the value that the
   item implies."
   [frame item field k]
@@ -507,7 +511,7 @@
 
 (defn- nested-value
   "The value of the microformat `item` of the element `node` as a property
-  of the `prefix`, by 1.2, `env` and the `frame` of its parse."
+  with the `prefix`, by 1.2, `env` and the `frame` of its parse."
   [env prefix node item frame]
   (case prefix
     "p"  {:value (or (first-value frame item :p-name :name)
@@ -520,9 +524,9 @@
 
 (defn- add-item
   "The `frame` of the parent microformat, or of the document, with the
-  microformat `item` of the element `node` added: as the value of its
-  properties `props`, by `env`, or else as a child. The `child` is the
-  frame of the parse of the item."
+  microformat `item` of the element `node` added, by `env`, as the value
+  of the properties `props`, or else as a child. The `child` is the
+  item's own frame."
   [env frame node props item child]
   (if (seq props)
     (reduce (fn [frame [prefix n]]
@@ -543,8 +547,8 @@
   (some-> (:rel attrs) str html/ascii-lower-case html/split-whitespace distinct))
 
 (defn add-rel
-  "The `state` of the parse with the rels of the hyperlink element `node`,
-  in lower case, and their URLs made absolute by `env`."
+  "The parse `state` with the rels of the link element `node` added, in
+  lower case, and with their URLs made absolute by `env`."
   [{:keys [absolute] :as env} state node]
   (let [attrs (html/attrs node)
         rels  (rel-values attrs)]
@@ -566,23 +570,23 @@
                              (update :rels #(vec (into (sorted-set) (concat % rels))))))))))))
 
 (def initial-state
-  "The state of the parse of a document before its first node: the frame of
-  the document, whose children are the top-level microformats, its rels,
-  and the number of microformats that have begun."
+  "The parse state of a document before its first node. It holds the
+  document's frame, whose children are the top-level microformats, the
+  rels, and the number of microformats begun so far."
   {:frame    {:top? true :children []}
    :rels     {}
    :rel-urls {}
    :begun    0})
 
 (defn position
-  "The place of the microformat `item` in the document order of its page,
-  counted from 0, or nil when it didn't come from a parse."
+  "The position of the microformat `item` in the document order of its
+  page, counting from 0, or nil when it didn't come from a parse."
   [item]
   (::position (meta item)))
 
 (defn walk-rels
-  "The `state` of the parse by `env` with the rels of the Hiccup `node` and
-  of what it holds, outside templates, but not its microformats."
+  "The parse `state` after walking the Hiccup `node` with `env` for its
+  rels alone, outside templates."
   [env state node]
   (if (and (html/element? node) (not= :template (html/tag node)))
     (html/reduce-children #(walk-rels env %1 %2)
@@ -595,8 +599,8 @@
 (declare walk)
 
 (defn- add-rel-properties
-  "The `frame` of the backcompat microformat of `env` with the rels of the
-  hyperlink element `node` that are properties of it."
+  "The `frame` of the backcompat microformat in `env`, with the rels of the
+  link element `node` that are its properties added."
   [env frame node]
   (let [attrs (html/attrs node)]
     (if (and (#{:a :area :link} (html/tag node)) (contains? attrs :href))
@@ -613,8 +617,8 @@
 
 (defn- add-proposed
   "The `frame` of an hentry with the properties that the element `node`
-  gives it by the rules that the microformats wiki proposes, the first of
-  each, made absolute by `env`."
+  supplies by the rules the microformats wiki proposes, made absolute by
+  `env`, keeping the first of each."
   [env frame node]
   (reduce-kv (fn [frame k v]
                (update-in frame [:proposed k] #(or % [v])))
@@ -622,10 +626,11 @@
              (backcompat/proposed-properties (:absolute env) node)))
 
 ;; the ids that a root refers to are excluded inside it, so that includes
-;; that refer to each other end
+;; that refer to each other don't loop forever
 (defn- with-includes
-  "The backcompat root element `node` with what it includes by the include
-  pattern, and `env` with the ids it refers to excluded."
+  "A pair of the backcompat root element `node` with the elements it
+  includes by the include pattern, and `env` with the ids it refers to
+  excluded."
   [env node]
   (let [refs (backcompat/refs microformat? node)]
     (if (empty? refs)
@@ -634,10 +639,10 @@
        (update env :excluded into refs)])))
 
 (defn- walk-item
-  "The `state` of the parse by `env` after the microformat element `node` of
-  the root `types` and the property classes `props`, which is a backcompat
-  microformat when `backcompat?`. Inside it, :backcompat in `env` is its
-  types, or nil."
+  "The parse `state` after walking the microformat element `node` with
+  `env`, where `node` has the root `types` and the property classes
+  `props`, and is a backcompat microformat when `backcompat?`. Inside it,
+  :backcompat in `env` holds its types, or nil."
   [env state node types props backcompat?]
   (let [frame      (:frame state)
         begun      (:begun state)
@@ -653,12 +658,13 @@
                      {::position begun})]
     (assoc state :frame (add-item env frame node props item child))))
 
-;; inside a backcompat microformat, the class names that count are those of
-;; its backcompat properties, and a property can imply a root, e.g. the item
-;; of an hreview, which is an h-item
+;; inside a backcompat microformat, only the class names of its backcompat
+;; properties count, and a property can imply a root, e.g. the item of an
+;; hreview, which is an h-item
 (defn- walk-classes
-  "The `state` of the parse by `env` after the element `node` of the class
-  names `classes`, which can be a microformat or a property."
+  "The parse `state` after walking the element `node` with `env`, where
+  `node` has the class names `classes` and may be a microformat or a
+  property."
   [env state node classes]
   (let [frame   (:frame state)
         context (:backcompat env)
@@ -683,8 +689,8 @@
                                         node))))
 
 (defn walk
-  "The `state` of the parse by `env` after the Hiccup `node`, which isn't
-  in a template."
+  "The parse `state` after walking the Hiccup `node` with `env`, where
+  `node` isn't in a template."
   [env state node]
   (if-not (html/element? node)
     state
@@ -700,8 +706,8 @@
               (html/reduce-children #(walk env %1 %2) state node))))))))
 
 (defn base-href
-  "The href of the first base element of the Hiccup `nodes` that has one,
-  outside a template."
+  "The href of the first base element with an href in the Hiccup `nodes`,
+  outside templates."
   [nodes]
   (letfn [(href [_ x]
             (when (and (html/element? x) (not= :template (html/tag x)))
